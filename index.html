@@ -21,8 +21,14 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 .top b{font-size:16px;letter-spacing:.06em}
 .ibtn{background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 12px;font:inherit;font-size:13px}
 .ibtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 300px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
-@supports not (height:100dvh){.vf{max-height:calc(100vh - 300px)}}
+.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 344px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
+@supports not (height:100dvh){.vf{max-height:calc(100vh - 344px)}}
+.fbar{display:flex;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
+.fbar::-webkit-scrollbar{display:none}
+.fbar button{flex:0 0 auto;position:relative;background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 13px;font:500 13px var(--f)}
+.fbar button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.fbar button.rec::after{content:"推薦";position:absolute;top:-6px;right:-4px;font-size:9px;font-weight:700;background:var(--accent);color:#1a1408;padding:1px 5px;border-radius:99px}
+.fbar .sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
 .vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .vf video.mirror{transform:scaleX(-1)}
 .vf canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -77,6 +83,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 <div class="vf" id="vf">
   <video id="v" playsinline muted autoplay></video>
+  <canvas id="pc" hidden></canvas>
   <canvas id="ov"></canvas>
   <div class="banner"><span id="banner"></span></div>
   <div class="lens" id="lens"></div>
@@ -88,6 +95,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小。</div>
+<div class="fbar" id="fbar"></div>
 
 <div class="tabs" id="tabs">
   <button data-c="people" aria-pressed="true">人像</button>
@@ -298,7 +306,7 @@ async function setLens(k,fromTpl){
   }catch(e){curLens=prev;}
   lensButtons();
 }
-let hintT;function hint(s){$('hint').textContent=s;clearTimeout(hintT);hintT=setTimeout(()=>$('hint').textContent='拖曳虛線移位置，雙指縮放大小。',4000);}
+let hintT=null;function hint(s){$('hint').textContent=s;clearTimeout(hintT);hintT=setTimeout(()=>{hintT=null;$('hint').textContent=$('hint').dataset.rec||'拖曳虛線移位置，雙指縮放大小。';},4000);}
 
 $('startBtn').onclick=async()=>{
   if(!window.isSecureContext||!navigator.mediaDevices){$('msg').firstElementChild.innerHTML='這個網址不能開相機。<br>請用 https 開頭的網址打開。';return;}
@@ -311,14 +319,104 @@ $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
-/* ---------- capture: crops to exactly what the viewfinder shows, guides not included ---------- */
+/* ---------- color filters ----------
+   b brightness, c contrast, s saturation, w warmth (+R −B), t tint (−G), f fade (lifted blacks), g gamma */
+const FIL={
+  none:{n:'原色',sw:'#9a9a9a'},
+  vivid:{n:'自然鮮明',sw:'#E7A34B',b:.02,c:1.06,s:1.15},
+  milk:{n:'日系奶白',sw:'#F1E6D8',b:.07,c:.9,s:.82,w:.02,f:.07},
+  latte:{n:'奶茶暖調',sw:'#C8A07A',b:.02,c:.95,s:.9,w:.07,f:.05},
+  tasty:{n:'美味暖色',sw:'#E07A3C',b:.03,c:1.08,s:1.2,w:.05},
+  clear:{n:'清透藍',sw:'#7FB2DE',b:.04,c:1.02,s:1.05,w:-.06,f:.02},
+  forest:{n:'森林綠',sw:'#6E9070',c:1.05,s:.92,w:.02,t:-.02,f:.05},
+  film:{n:'電影灰調',sw:'#8C8A84',c:1.1,s:.7,w:.03,f:.08},
+  night:{n:'夜晚提亮',sw:'#3F4A78',b:.08,g:.82,c:1.05,s:1.1,w:.03},
+  mono:{n:'黑白',sw:'#222',c:1.15,s:0},
+};
+let fil='none',autoFil=false,recFil=null;
+const lutCache={};
+function lut(key){
+  if(lutCache[key])return lutCache[key];
+  const p=FIL[key],R=new Uint8ClampedArray(256),Gc=new Uint8ClampedArray(256),B=new Uint8ClampedArray(256);
+  const tone=(x,extra)=>{
+    if(p.g)x=Math.pow(x,p.g);
+    x=x+(p.b||0);x=(x-.5)*(p.c||1)+.5;x+=extra;const f=p.f||0;x=f+x*(1-f);
+    return Math.round(Math.max(0,Math.min(1,x))*255);};
+  for(let i=0;i<256;i++){const x=i/255;R[i]=tone(x,p.w||0);Gc[i]=tone(x,-(p.t||0));B[i]=tone(x,-(p.w||0));}
+  return lutCache[key]={R,G:Gc,B,s:p.s==null?1:p.s};
+}
+function applyFilter(g,w,h,key){
+  if(key==='none')return;
+  const L=lut(key),img=g.getImageData(0,0,w,h),d=img.data,s=L.s;
+  for(let i=0;i<d.length;i+=4){
+    let r=L.R[d[i]],gg=L.G[d[i+1]],b=L.B[d[i+2]];
+    if(s!==1){const l=.299*r+.587*gg+.114*b;r=l+(r-l)*s;gg=l+(gg-l)*s;b=l+(b-l)*s;}
+    d[i]=r;d[i+1]=gg;d[i+2]=b;
+  }
+  g.putImageData(img,0,0);
+}
+function crop(vw,vh){const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
+
+/* filter chips */
+function buildFbar(){
+  const box=$('fbar');box.innerHTML='';
+  const a=document.createElement('button');a.textContent='自動';a.setAttribute('aria-pressed',autoFil);
+  a.onclick=()=>{autoFil=!autoFil;if(autoFil&&recFil)fil=recFil;buildFbar();};box.appendChild(a);
+  Object.entries(FIL).forEach(([k,p])=>{
+    const b=document.createElement('button');b.innerHTML=`<span class="sw" style="background:${p.sw}"></span>${p.n}`;
+    b.setAttribute('aria-pressed',fil===k&&!(autoFil&&k!==fil));if(k===recFil)b.classList.add('rec');
+    b.onclick=()=>{fil=k;autoFil=false;buildFbar();};box.appendChild(b);
+  });
+  $('pc').hidden=fil==='none';
+}
+
+/* analyse the scene about once a second: average brightness, warmth, saturation, greenness */
+const an=document.createElement('canvas');an.width=48;an.height=64;const ag=an.getContext('2d',{willReadFrequently:true});
+function analyse(){
+  if(!stream||!v.videoWidth)return;
+  const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight);ag.drawImage(v,sx,sy,sw,sh,0,0,48,64);
+  const d=ag.getImageData(0,0,48,64).data;let L=0,warm=0,S=0,green=0,n=d.length/4;
+  for(let i=0;i<d.length;i+=4){const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);L+=.299*r+.587*g+.114*b;S+=mx?(mx-mn)/mx:0;warm+=r-b;if(g>r*1.08&&g>b*1.08)green++;}
+  L/=n;S/=n;warm/=n;green/=n;
+  let k,why;
+  if(L<.28){k='night';why='畫面偏暗';}
+  else if(green>.35){k='forest';why='綠色很多';}
+  else if(warm<-.04){k='clear';why='畫面偏藍';}
+  else if(cat==='food'&&warm>.04){k='tasty';why='食物偏暖色';}
+  else if(L>.66&&S<.3){k='milk';why='畫面很亮、顏色淡';}
+  else if(warm>.08){k='latte';why='畫面偏暖';}
+  else if(S<.14){k='film';why='顏色偏灰';}
+  else{k='vivid';why='光線正常';}
+  if(k!==recFil){recFil=k;if(autoFil)fil=k;buildFbar();}
+  $('hint').dataset.rec=`${why}，推薦「${FIL[k].n}」`;
+  if(!hintT)$('hint').textContent=$('hint').dataset.rec;
+}
+setInterval(analyse,1000);
+
+/* live preview with the filter, drawn small for speed */
+const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true});
+function loop(){
+  if(stream&&v.videoWidth&&fil!=='none'){
+    const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight);const W=360,H=480;
+    if(pc.width!==W){pc.width=W;pc.height=H;}
+    pg.save();if(facing==='user'){pg.translate(W,0);pg.scale(-1,1);}
+    pg.drawImage(v,sx,sy,sw,sh,0,0,W,H);pg.restore();applyFilter(pg,W,H,fil);
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+buildFbar();
+
+/* ---------- capture: crops to exactly what the viewfinder shows, guides not included, filter applied ---------- */
 let lastBlob=null,lastURL=null;
 function grab(){
   const vw=v.videoWidth,vh=v.videoHeight;if(!vw)return null;
-  const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;
-  const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d');
+  const [sx,sy,sw,sh]=crop(vw,vh);
+  const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d',{willReadFrequently:true});
   if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
-  g.drawImage(v,(vw-sw)/2,(vh-sh)/2,sw,sh,0,0,c.width,c.height);return c;
+  g.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
+  g.setTransform(1,0,0,1,0,0);applyFilter(g,c.width,c.height,fil);return c;
 }
 async function shoot(){
   if(!stream)return;
