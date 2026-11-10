@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0E0B10">
+<title>照著框拍</title>
+<style>
+/* Camera UI: one dark look on purpose (a viewfinder). 3:4 viewport with overlay, category tabs, template strip, shutter row */
+:root{
+  --bg:#0E0B10; --panel:#1B1620; --ink:#F4EEF6; --muted:#A397AC; --accent:#E9C98A; --rec:#FF6688;
+  color-scheme:dark;
+  --f:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--f);overscroll-behavior:none}
+body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);user-select:none;-webkit-user-select:none}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px));font-size:14px}
+.top b{font-size:16px;letter-spacing:.06em}
+.ibtn{background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 12px;font:inherit;font-size:13px}
+.ibtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 300px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
+@supports not (height:100dvh){.vf{max-height:calc(100vh - 300px)}}
+.vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.vf video.mirror{transform:scaleX(-1)}
+.vf canvas{position:absolute;inset:0;width:100%;height:100%}
+.banner{position:absolute;left:10px;top:10px;right:10px;display:flex;pointer-events:none}
+.banner span{background:rgba(0,0,0,.55);color:#fff;font-size:13px;font-weight:600;letter-spacing:.04em;padding:6px 12px;border-radius:99px;max-width:100%}
+.lens{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:8px;background:rgba(0,0,0,.35);padding:5px;border-radius:99px}
+.lens button{width:40px;height:40px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font:600 13px var(--f)}
+.lens button[aria-pressed="true"]{color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.lens button.suggest:not([aria-pressed="true"]){box-shadow:inset 0 0 0 1px rgba(233,201,138,.6)}
+.count{position:absolute;inset:0;display:grid;place-items:center;font-size:120px;font-weight:800;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.5);pointer-events:none}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.msg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;text-align:center;padding:24px;background:var(--bg);font-size:15px;line-height:1.6}
+.msg button{background:var(--accent);color:#1a1408;border:0;border-radius:12px;padding:12px 20px;font:700 16px var(--f)}
+.hint{text-align:center;font-size:12px;color:var(--muted);padding:6px 14px 0;min-height:24px}
+.tabs{display:flex;justify-content:center;gap:6px;padding:6px 14px 0}
+.tabs button{background:none;border:0;color:var(--muted);font:600 14px var(--f);padding:6px 12px;border-radius:99px;letter-spacing:.06em}
+.tabs button[aria-pressed="true"]{color:var(--bg);background:var(--accent)}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:8px max(14px,env(safe-area-inset-left,0px)) 6px;scrollbar-width:none;min-height:104px}
+.strip::-webkit-scrollbar{display:none}
+.tpl{flex:0 0 auto;width:66px;border:0;padding:0;background:none;color:var(--ink);font:inherit;font-size:11px;display:flex;flex-direction:column;gap:5px;align-items:center;line-height:1.25;text-align:center}
+.tpl canvas{width:66px;height:88px;border-radius:10px;background:#2A2330;display:block}
+.tpl[aria-pressed="true"] canvas{outline:2px solid var(--accent);outline-offset:1px}
+.refbox{display:flex;flex-direction:column;gap:8px;padding:4px 14px 0;width:100%;max-width:560px;margin:0 auto;font-size:13px}
+.refbox .row{display:flex;gap:10px;align-items:center}
+.file{position:relative;overflow:hidden;display:inline-block}
+.file input{position:absolute;inset:0;opacity:0}
+.refbox input[type=range]{flex:1;accent-color:var(--accent)}
+.shoot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:6px 22px 12px;margin-top:auto}
+.shoot .l{justify-self:start}.shoot .r{justify-self:end}
+.shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;background:transparent;padding:5px}
+.shutter span{display:block;width:100%;height:100%;border-radius:50%;background:#fff;transition:transform .1s}
+.shutter:active span{transform:scale(.9)}
+.thumb{width:48px;height:48px;border-radius:10px;border:2px solid #fff;object-fit:cover;background:var(--panel)}
+#review{position:fixed;inset:0;z-index:5;background:var(--bg);display:flex;flex-direction:column;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 14px calc(16px + env(safe-area-inset-bottom,0px))}
+#review img{flex:1;min-height:0;width:100%;object-fit:contain;border-radius:12px}
+#review .row{display:flex;gap:10px}
+#review .row button{flex:1;padding:14px;border-radius:12px;border:0;font:700 16px var(--f);background:var(--panel);color:var(--ink)}
+#review .row button.save{background:var(--accent);color:#1a1408}
+#review p{margin:0;text-align:center;font-size:13px;color:var(--muted)}
+[hidden]{display:none!important}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="top">
+  <b>照著框拍</b>
+  <div style="display:flex;gap:8px">
+    <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
+    <button class="ibtn" id="timerBtn" aria-pressed="false">倒數 3 秒</button>
+  </div>
+</div>
+
+<div class="vf" id="vf">
+  <video id="v" playsinline muted autoplay></video>
+  <canvas id="ov"></canvas>
+  <div class="banner"><span id="banner"></span></div>
+  <div class="lens" id="lens"></div>
+  <div class="count" id="count" hidden></div>
+  <div class="flash" id="flash"></div>
+  <div class="msg" id="msg">
+    <div>點下面按鈕開啟相機。<br>請允許使用相機。</div>
+    <button id="startBtn">開啟相機</button>
+  </div>
+</div>
+<div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小。</div>
+
+<div class="tabs" id="tabs">
+  <button data-c="people" aria-pressed="true">人像</button>
+  <button data-c="food" aria-pressed="false">食物</button>
+  <button data-c="ref" aria-pressed="false">照片疊圖</button>
+</div>
+<div class="strip" id="strip"></div>
+<div class="refbox" id="refbox" hidden>
+  <div class="row">
+    <label class="ibtn file">選一張想模仿的照片<input id="refIn" type="file" accept="image/*"></label>
+    <span id="refName" style="color:var(--muted)">還沒選</span>
+  </div>
+  <div class="row"><span>透明度</span><input id="refOp" type="range" min="10" max="80" value="40"></div>
+</div>
+
+<div class="shoot">
+  <img class="thumb l" id="thumb" alt="" hidden>
+  <span class="l" id="thumbPh"></span>
+  <button class="shutter" id="shutter" aria-label="拍照"><span></span></button>
+  <button class="ibtn r" id="flipBtn">前／後鏡頭</button>
+</div>
+
+<div id="review" hidden>
+  <img id="rImg" alt="剛拍的照片">
+  <p id="rTip">按「存到相簿」後選「儲存影像」。也可以長按照片儲存。</p>
+  <div class="row">
+    <button id="retake">再拍一張</button>
+    <button class="save" id="saveBtn">存到相簿</button>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const v=$('v'),ov=$('ov'),oc=ov.getContext('2d'),vf=$('vf');
+
+/* ---------- templates ----------
+   Coordinates: x = fraction of width, y = fraction of height. Circle r = fraction of width.
+   s: shapes  rect{x1,y1,x2,y2,round}  circ{x,y,r,cross}  line{x1,y1,x2,y2,arrow}  sil{x,y1,y2,kind}  text{x,y,t} */
+const TPL={
+ people:[
+  {n:'全身置中',lens:'1',say:'站進框裡，腳踩框底',s:[
+    {k:'sil',x:.5,y1:.3,y2:.92,kind:'stand'},{k:'rect',x1:.37,y1:.3,x2:.63,y2:.92,round:1},{k:'text',x:.5,y:.955,t:'腳在這'}]},
+  {n:'坐著',lens:'2',say:'坐好，整個人放進框',s:[
+    {k:'sil',x:.5,y1:.27,y2:.94,kind:'sit'},{k:'rect',x1:.35,y1:.27,x2:.65,y2:.94,round:1}]},
+  {n:'半身',lens:'2',say:'頭頂留一點空，胸口以上',s:[
+    {k:'sil',x:.5,y1:.2,y2:1.0,kind:'half'},{k:'rect',x1:.24,y1:.18,x2:.76,y2:1.02,round:1}]},
+  {n:'臉在三分點',lens:'2',say:'眼睛對準圈圈中間',s:[
+    {k:'circ',x:.667,y:.333,r:.09,cross:1},{k:'rect',x1:.52,y1:.24,x2:.82,y2:1.02,round:1}]},
+  {n:'看的方向留白',lens:'1',say:'她看向箭頭那邊，前面留空',s:[
+    {k:'sil',x:.33,y1:.32,y2:.92,kind:'stand'},{k:'rect',x1:.22,y1:.32,x2:.44,y2:.92,round:1},{k:'line',x1:.5,y1:.5,x2:.85,y2:.5,arrow:1}]},
+  {n:'小人遠景',lens:'0.5',say:'地平線放下面三分之一，人小小的',s:[
+    {k:'line',x1:0,y1:.667,x2:1,y2:.667},{k:'rect',x1:.635,y1:.55,x2:.70,y2:.8,round:1},{k:'text',x:.667,y:.84,t:'人'}]},
+  {n:'消失點',lens:'1',say:'站在路中間，線條往她集中',s:[
+    {k:'line',x1:.5,y1:.48,x2:.04,y2:1},{k:'line',x1:.5,y1:.48,x2:.96,y2:1},{k:'rect',x1:.45,y1:.5,x2:.55,y2:.74,round:0}]},
+ ],
+ food:[
+  {n:'兩點',lens:'1',say:'主角一個圈，配角一個圈',s:[
+    {k:'circ',x:.34,y:.36,r:.17},{k:'circ',x:.64,y:.68,r:.23}]},
+  {n:'三角',lens:'2',say:'三樣東西排成三角形',s:[
+    {k:'circ',x:.5,y:.3,r:.15},{k:'circ',x:.3,y:.66,r:.19},{k:'circ',x:.72,y:.62,r:.16},{k:'tri',pts:[[.5,.3],[.3,.66],[.72,.62]]}]},
+  {n:'俯拍三角',lens:'1',say:'手機舉高，垂直往下拍',s:[
+    {k:'circ',x:.32,y:.32,r:.15},{k:'circ',x:.7,y:.4,r:.13},{k:'circ',x:.45,y:.7,r:.22},{k:'tri',pts:[[.32,.32],[.7,.4],[.45,.7]]}]},
+  {n:'俯拍置中',lens:'1',say:'盤子放正中間，正上方往下拍',s:[
+    {k:'circ',x:.5,y:.52,r:.34},{k:'circ',x:.5,y:.52,r:.15},{k:'circ',x:.84,y:.14,r:.08}]},
+  {n:'斜角桌面',lens:'2',say:'桌緣斜斜穿過畫面',s:[
+    {k:'line',x1:0,y1:.82,x2:1,y2:.42},{k:'circ',x:.42,y:.56,r:.2},{k:'circ',x:.75,y:.34,r:.1}]},
+  {n:'飲料特寫',lens:'2',say:'杯子放框裡，杯口上方留一點空',s:[
+    {k:'rect',x1:.3,y1:.24,x2:.7,y2:.9,round:1},{k:'line',x1:.3,y1:.34,x2:.7,y2:.34}]},
+  {n:'甜點低角度',lens:'2',say:'手機貼近桌面平拍，背景會糊',s:[
+    {k:'line',x1:0,y1:.72,x2:1,y2:.72},{k:'circ',x:.5,y:.6,r:.24}]},
+ ]
+};
+let cat='people', cur=0, showGrid=true, timer=false;
+let G={dx:0,dy:0,k:1};   // group transform around center
+let refImg=null, refOp=.4;
+
+/* ---------- shape drawing (shared by overlay and thumbnails) ---------- */
+function rr(g,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+function sil(g,cx,top,h,kind){
+  g.save();g.fillStyle='rgba(255,255,255,.16)';const u=h;
+  if(kind==='half'){g.beginPath();g.ellipse(cx,top+u*.2,u*.11,u*.14,0,0,7);g.fill();
+    g.beginPath();g.moveTo(cx-u*.36,top+u);g.quadraticCurveTo(cx-u*.34,top+u*.42,cx,top+u*.4);g.quadraticCurveTo(cx+u*.34,top+u*.42,cx+u*.36,top+u);g.fill();}
+  else if(kind==='sit'){g.beginPath();g.ellipse(cx,top+u*.08,u*.055,u*.07,0,0,7);g.fill();
+    rr(g,cx-u*.09,top+u*.17,u*.18,u*.36,u*.06);g.fill();rr(g,cx-u*.09,top+u*.47,u*.22,u*.1,u*.05);g.fill();
+    rr(g,cx+u*.05,top+u*.5,u*.08,u*.48,u*.04);g.fill();rr(g,cx-u*.05,top+u*.52,u*.08,u*.46,u*.04);g.fill();}
+  else{g.beginPath();g.ellipse(cx,top+u*.065,u*.05,u*.065,0,0,7);g.fill();
+    rr(g,cx-u*.085,top+u*.15,u*.17,u*.38,u*.06);g.fill();rr(g,cx-u*.075,top+u*.5,u*.065,u*.5,u*.03);g.fill();rr(g,cx+u*.01,top+u*.5,u*.065,u*.5,u*.03);g.fill();}
+  g.restore();
+}
+function drawShapes(g,W,H,shapes,T,lw){
+  const X=x=>((x-.5)*T.k+.5+T.dx)*W, Y=y=>((y-.5)*T.k+.5+T.dy)*H, R=r=>r*T.k*W;
+  g.save();g.lineCap='round';g.lineJoin='round';
+  // pass 1: silhouettes
+  shapes.filter(s=>s.k==='sil').forEach(s=>sil(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.kind));
+  // pass 2: lines with a soft dark halo then white dashes
+  for(const pass of [0,1]){
+    g.strokeStyle=pass?'#fff':'rgba(0,0,0,.35)';g.fillStyle=g.strokeStyle;
+    g.lineWidth=pass?lw:lw+2.5;g.setLineDash(pass?[lw*3.2,lw*2.4]:[]);
+    shapes.forEach(s=>{
+      if(s.k==='rect'){rr(g,X(s.x1),Y(s.y1),X(s.x2)-X(s.x1),Y(s.y2)-Y(s.y1),s.round?Math.min(lw*9,(X(s.x2)-X(s.x1))/4):0);g.stroke();}
+      else if(s.k==='circ'){g.beginPath();g.arc(X(s.x),Y(s.y),R(s.r),0,7);g.stroke();
+        if(s.cross){const c=R(s.r)*.45;g.beginPath();g.moveTo(X(s.x)-c,Y(s.y));g.lineTo(X(s.x)+c,Y(s.y));g.moveTo(X(s.x),Y(s.y)-c);g.lineTo(X(s.x),Y(s.y)+c);g.stroke();}}
+      else if(s.k==='line'){g.beginPath();g.moveTo(X(s.x1),Y(s.y1));g.lineTo(X(s.x2),Y(s.y2));g.stroke();
+        if(s.arrow){g.setLineDash([]);const a=Math.atan2(Y(s.y2)-Y(s.y1),X(s.x2)-X(s.x1)),L=lw*6;
+          g.beginPath();g.moveTo(X(s.x2)-L*Math.cos(a-.5),Y(s.y2)-L*Math.sin(a-.5));g.lineTo(X(s.x2),Y(s.y2));g.lineTo(X(s.x2)-L*Math.cos(a+.5),Y(s.y2)-L*Math.sin(a+.5));g.stroke();
+          g.setLineDash(pass?[lw*3.2,lw*2.4]:[]);}}
+      else if(s.k==='tri'){g.save();g.globalAlpha=.5;g.lineWidth=g.lineWidth*.7;g.beginPath();s.pts.forEach((p,i)=>i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));g.closePath();g.stroke();g.restore();}
+      else if(s.k==='text'&&pass){g.setLineDash([]);g.font=`600 ${lw*6}px ${getComputedStyle(document.body).fontFamily}`;g.textAlign='center';g.textBaseline='middle';
+        g.lineWidth=3;g.strokeStyle='rgba(0,0,0,.45)';g.strokeText(s.t,X(s.x),Math.min(Y(s.y),H-lw*5));g.fillText(s.t,X(s.x),Math.min(Y(s.y),H-lw*5));g.strokeStyle='#fff';}
+    });
+  }
+  g.restore();
+}
+function gridLines(g,W,H,lw){
+  g.save();g.strokeStyle='rgba(255,255,255,.5)';g.lineWidth=lw;
+  [[W/3,0,W/3,H],[2*W/3,0,2*W/3,H],[0,H/3,W,H/3],[0,2*H/3,W,2*H/3]].forEach(l=>{g.beginPath();g.moveTo(l[0],l[1]);g.lineTo(l[2],l[3]);g.stroke();});g.restore();
+}
+
+/* ---------- strip ---------- */
+function buildStrip(){
+  const box=$('strip');box.innerHTML='';
+  $('refbox').hidden=cat!=='ref';box.hidden=cat==='ref';
+  if(cat==='ref'){$('banner').textContent=refImg?'把畫面跟疊上去的照片對齊':'先選一張想模仿的照片';draw();return;}
+  TPL[cat].forEach((t,i)=>{
+    const b=document.createElement('button');b.className='tpl';b.setAttribute('aria-pressed',i===cur);
+    const c=document.createElement('canvas');const d=devicePixelRatio||1;c.width=66*d;c.height=88*d;
+    const g=c.getContext('2d');gridLines(g,c.width,c.height,.6*d);drawShapes(g,c.width,c.height,t.s,{dx:0,dy:0,k:1},1.1*d);
+    const lab=document.createElement('span');lab.textContent=`${t.n}・${t.lens==='0.5'?'.5':t.lens}x`;
+    b.append(c,lab);b.onclick=()=>pick(i);box.appendChild(b);
+  });
+}
+function pick(i){
+  cur=i;G={dx:0,dy:0,k:1};const t=TPL[cat][i];
+  [...$('strip').children].forEach((c,j)=>c.setAttribute('aria-pressed',j===i));
+  $('banner').textContent=t.say;setLens(t.lens,true);draw();
+}
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;cat=b.dataset.c;cur=0;G={dx:0,dy:0,k:1};
+  [...$('tabs').children].forEach(c=>c.setAttribute('aria-pressed',c===b));buildStrip();if(cat!=='ref')pick(0);};
+$('refIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{refImg=im;$('refName').textContent='已選好';$('banner').textContent='把畫面跟疊上去的照片對齊';draw();};im.src=URL.createObjectURL(f);};
+$('refOp').oninput=e=>{refOp=e.target.value/100;draw();};
+
+/* ---------- overlay ---------- */
+function sizeCanvas(){const r=vf.getBoundingClientRect(),d=devicePixelRatio||1;ov.width=Math.round(r.width*d);ov.height=Math.round(r.height*d);}
+function draw(){
+  const W=ov.width,H=ov.height,d=devicePixelRatio||1;oc.clearRect(0,0,W,H);
+  if(cat==='ref'&&refImg){
+    const iw=refImg.naturalWidth,ih=refImg.naturalHeight,s=Math.max(W/iw,H/ih)*G.k;
+    const w=iw*s,h=ih*s;oc.save();oc.globalAlpha=refOp;oc.drawImage(refImg,(W-w)/2+G.dx*W,(H-h)/2+G.dy*H,w,h);oc.restore();
+  }
+  if(showGrid)gridLines(oc,W,H,1*d);
+  if(cat!=='ref')drawShapes(oc,W,H,TPL[cat][cur].s,G,2.2*d);
+}
+
+/* ---------- drag + pinch (moves the whole guide, or the reference photo) ---------- */
+const pts=new Map();let start=null;
+function rel(e){const r=vf.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};}
+function center(){const p=[...pts.values()];return p.reduce((a,q)=>({x:a.x+q.x/p.length,y:a.y+q.y/p.length}),{x:0,y:0});}
+function spread(){const p=[...pts.values()];return p.length>1?Math.hypot(p[0].x-p[1].x,(p[0].y-p[1].y)*4/3):0;}
+function snap(){start={c:center(),d:spread(),G:{...G}};}
+vf.addEventListener('pointerdown',e=>{if(e.target.closest('.lens,.msg'))return;vf.setPointerCapture(e.pointerId);pts.set(e.pointerId,rel(e));snap();});
+vf.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,rel(e));
+  const c=center();let k=start.G.k;if(pts.size>1&&start.d>0)k=Math.max(.3,Math.min(3,start.G.k*spread()/start.d));
+  G={k,dx:start.G.dx+c.x-start.c.x,dy:start.G.dy+c.y-start.c.y};draw();});
+function up(e){pts.delete(e.pointerId);if(pts.size)snap();}
+vf.addEventListener('pointerup',up);vf.addEventListener('pointercancel',up);
+vf.addEventListener('dblclick',()=>{G={dx:0,dy:0,k:1};draw();});
+
+/* ---------- camera ---------- */
+let stream=null,facing='environment',lensMap={},curLens='1',zoomCap=null,suggest='1';
+function stop(){stream&&stream.getTracks().forEach(t=>t.stop());stream=null;}
+async function open(deviceId){
+  stop();
+  const vc={width:{ideal:3024},height:{ideal:4032},aspectRatio:{ideal:3/4}};
+  if(deviceId)vc.deviceId={exact:deviceId};else vc.facingMode=facing;
+  stream=await navigator.mediaDevices.getUserMedia({video:vc,audio:false});
+  v.srcObject=stream;await v.play().catch(()=>{});
+  v.classList.toggle('mirror',facing==='user');
+  const tr=stream.getVideoTracks()[0];const cap=tr.getCapabilities?tr.getCapabilities():{};zoomCap=cap.zoom||null;
+}
+async function mapLenses(){
+  let cams=[];try{cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');}catch(e){}
+  lensMap={};
+  const back=cams.filter(c=>!/front|前|user|facetime/i.test(c.label));
+  const find=re=>back.find(c=>re.test(c.label));
+  const uw=find(/ultra ?wide|超廣角/i),tele=find(/tele|長焦|望遠/i);
+  const wide=find(/^back camera$|^後置相機$|^後鏡頭$|wide angle|廣角相機/i)||back.find(c=>c!==uw&&c!==tele&&!/dual|triple|雙|三/i.test(c.label));
+  if(uw)lensMap['0.5']={id:uw.deviceId};if(wide)lensMap['1']={id:wide.deviceId};if(tele)lensMap['2']={id:tele.deviceId};
+}
+function lensButtons(){
+  const box=$('lens');box.innerHTML='';
+  if(facing==='user'||!stream){box.hidden=true;return;}box.hidden=false;
+  ['0.5','1','2'].forEach(k=>{
+    const ok=lensMap[k]||k==='1'||(k==='2'&&zoomCap&&zoomCap.max>=2)||(k==='0.5'&&zoomCap&&zoomCap.min<=.5);if(!ok)return;
+    const b=document.createElement('button');b.textContent=k==='0.5'?'.5':k+'x';b.setAttribute('aria-pressed',curLens===k);
+    if(k===suggest)b.classList.add('suggest');b.onclick=()=>setLens(k);box.appendChild(b);
+  });
+}
+async function setLens(k,fromTpl){
+  if(fromTpl)suggest=k;
+  if(!stream||facing==='user'){lensButtons();return;}
+  const prev=curLens;curLens=k;
+  try{
+    if(lensMap[k]){await open(lensMap[k].id);}
+    else if(zoomCap){if(prev!=='1'&&lensMap[prev]&&lensMap['1'])await open(lensMap['1'].id);
+      await stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:Math.max(zoomCap.min,Math.min(zoomCap.max,parseFloat(k)))}]});}
+    else if(k!=='1'){curLens=prev;if(fromTpl)hint(`這支手機的瀏覽器不能切 ${k==='0.5'?'.5':k}x，用前後走動調整大小。`);}
+  }catch(e){curLens=prev;}
+  lensButtons();
+}
+let hintT;function hint(s){$('hint').textContent=s;clearTimeout(hintT);hintT=setTimeout(()=>$('hint').textContent='拖曳虛線移位置，雙指縮放大小。',4000);}
+
+$('startBtn').onclick=async()=>{
+  if(!window.isSecureContext||!navigator.mediaDevices){$('msg').firstElementChild.innerHTML='這個網址不能開相機。<br>請用 https 開頭的網址打開。';return;}
+  try{await open();await mapLenses();
+    $('msg').hidden=true;await setLens(suggest,true);
+  }catch(e){$('msg').firstElementChild.innerHTML='沒辦法開相機。<br>請到瀏覽器設定允許這個網站使用相機，再重新整理。';}
+};
+$('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment';curLens='1';
+  try{await open(facing==='environment'&&lensMap['1']?lensMap['1'].id:undefined);}catch(e){}lensButtons();};
+$('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
+$('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
+
+/* ---------- capture: crops to exactly what the viewfinder shows, guides not included ---------- */
+let lastBlob=null,lastURL=null;
+function grab(){
+  const vw=v.videoWidth,vh=v.videoHeight;if(!vw)return null;
+  const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;
+  const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d');
+  if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
+  g.drawImage(v,(vw-sw)/2,(vh-sh)/2,sw,sh,0,0,c.width,c.height);return c;
+}
+async function shoot(){
+  if(!stream)return;
+  if(timer){const el=$('count');el.hidden=false;for(let i=3;i>0;i--){el.textContent=i;await new Promise(r=>setTimeout(r,1000));}el.hidden=true;}
+  const c=grab();if(!c)return;
+  $('flash').style.opacity=.8;setTimeout(()=>$('flash').style.opacity=0,80);
+  c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
+    $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.95);
+}
+function openReview(){$('rImg').src=lastURL;$('review').hidden=false;}
+$('shutter').onclick=shoot;$('thumb').onclick=openReview;$('retake').onclick=()=>{$('review').hidden=true;};
+$('saveBtn').onclick=async()=>{
+  if(!lastBlob)return;
+  const name='frame-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.jpg';
+  const file=new File([lastBlob],name,{type:'image/jpeg'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return;}catch(e){if(e.name==='AbortError')return;}}
+  const a=document.createElement('a');a.href=lastURL;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  $('rTip').textContent='已下載。iPhone 在「檔案」App 的下載項目裡，也可以長按照片儲存。';
+};
+
+new ResizeObserver(()=>{sizeCanvas();draw();}).observe(vf);
+sizeCanvas();buildStrip();pick(0);
+})();
+</script>
+</body>
+</html>
