@@ -100,6 +100,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div class="tabs" id="tabs">
   <button data-c="people" aria-pressed="true">人像</button>
   <button data-c="food" aria-pressed="false">食物</button>
+  <button data-c="scene" aria-pressed="false">風景建築</button>
   <button data-c="ref" aria-pressed="false">照片疊圖</button>
 </div>
 <div class="strip" id="strip"></div>
@@ -167,6 +168,24 @@ const TPL={
     {k:'rect',x1:.3,y1:.24,x2:.7,y2:.9,round:1},{k:'line',x1:.3,y1:.34,x2:.7,y2:.34}]},
   {n:'甜點低角度',lens:'2',say:'手機貼近桌面平拍，背景會糊',s:[
     {k:'line',x1:0,y1:.72,x2:1,y2:.72},{k:'circ',x:.5,y:.6,r:.24}]},
+ ],
+ scene:[
+  {n:'置中對稱',lens:'2',say:'建築左右對稱，屋頂對準斜線',s:[
+    {k:'line',x1:.06,y1:.44,x2:.5,y2:.2},{k:'line',x1:.5,y1:.2,x2:.94,y2:.44},{k:'rect',x1:.38,y1:.3,x2:.62,y2:.56,round:0}]},
+  {n:'主體左三分',lens:'1',say:'主體放左邊三分線，右邊留天空',s:[
+    {k:'rect',x1:.2,y1:.24,x2:.46,y2:.86,round:0}]},
+  {n:'主體右三分',lens:'1',say:'主體放右邊三分線，左邊留空間',s:[
+    {k:'rect',x1:.54,y1:.24,x2:.8,y2:.86,round:0}]},
+  {n:'地平線放低',lens:'0.5',say:'天空好看，地平線放下面三分之一',s:[
+    {k:'line',x1:0,y1:.667,x2:1,y2:.667},{k:'text',x:.5,y:.62,t:'地平線'}]},
+  {n:'地平線放高',lens:'0.5',say:'地面或水面好看，地平線放上面',s:[
+    {k:'line',x1:0,y1:.333,x2:1,y2:.333},{k:'text',x:.5,y:.29,t:'地平線'}]},
+  {n:'引導線',lens:'0.5',say:'道路、欄杆、走廊的線條往主體集中',s:[
+    {k:'line',x1:.08,y1:1,x2:.5,y2:.44},{k:'line',x1:.92,y1:1,x2:.5,y2:.44},{k:'circ',x:.5,y:.4,r:.06}]},
+  {n:'仰拍高樓',lens:'0.5',say:'手機貼近地面往上拍，線條往上收',s:[
+    {k:'line',x1:.12,y1:1,x2:.4,y2:.05},{k:'line',x1:.88,y1:1,x2:.6,y2:.05},{k:'line',x1:.4,y1:.05,x2:.6,y2:.05}]},
+  {n:'框中框',lens:'1',say:'用門、窗或樹枝把主體框起來',s:[
+    {k:'rect',x1:.07,y1:.07,x2:.93,y2:.93,round:0},{k:'rect',x1:.36,y1:.38,x2:.64,y2:.66,round:0}]},
  ]
 };
 let cat='people', cur=0, showGrid=true, timer=false;
