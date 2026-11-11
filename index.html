@@ -93,6 +93,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="lens" id="lens"></div>
   <div class="focus" id="focus" hidden></div>
   <div class="count" id="count" hidden></div>
+  <div class="count" id="busy" hidden style="font-size:18px;font-weight:600;background:rgba(0,0,0,.35)">處理中…</div>
   <div class="flash" id="flash"></div>
   <div class="msg" id="msg">
     <div>點下面按鈕開啟相機。<br>請允許使用相機。</div>
@@ -103,7 +104,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div class="fbar" id="fbar"></div>
 <input id="matchIn" type="file" accept="image/*" hidden>
 <div class="refbox" id="matchRow" hidden>
-  <div class="row"><span>追色強度</span><input id="matchK" type="range" min="20" max="100" value="80"><output id="matchOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">80</output></div>
+  <div class="row"><span>強度</span><input id="matchK" type="range" min="10" max="100" step="5" value="100"><output id="matchOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">100</output></div>
 </div>
 
 <div class="tabs" id="tabs">
@@ -396,113 +397,237 @@ $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
-/* ---------- color looks (film emulation) ----------
-   curve: master tone curve points [in,out] 0..1 (lift the first point to fade blacks, drop the last to soften highlights)
-   r/g/b: per-channel curves after the master curve · sat: saturation · sh/hi: split-tone colour added to shadows/highlights
-   grain: film grain strength · vig: vignette strength · bw: black and white */
-const FIL={
-  none:{n:'原色',sw:'#9a9a9a'},
-  /* camera-maker inspired looks: rk = red saturation, gk = green saturation, bc = shift blues toward cyan */
-  cchrome:{n:'經典正片',sw:'#7C8A8F',curve:[[0,.03],[.2,.15],[.5,.5],[.8,.85],[1,.96]],sat:.78,rk:.75,bc:.25,sh:[0,.01,.03],hi:[.02,.015,0],grain:.02,vig:.08},
-  cneg:{n:'經典負片',sw:'#6F8C86',curve:[[0,.05],[.25,.2],[.5,.5],[.75,.8],[1,.93]],g:[[0,0],[.5,.52],[1,.98]],sat:.75,rk:.85,bc:.2,sh:[-.02,.02,.04],hi:[.04,.01,-.01],grain:.03,vig:.12},
-  velvia:{n:'鮮豔風景',sw:'#2E8B57',curve:[[0,0],[.25,.19],[.5,.51],[.75,.83],[1,1]],sat:1.35,gk:1.1,bc:.1,vig:.15},
-  hassel:{n:'自然膚色',sw:'#D8B8A0',curve:[[0,.02],[.25,.25],[.5,.52],[.75,.78],[1,.97]],r:[[0,0],[.5,.51],[1,1]],sat:.97,hi:[.01,.005,-.005],vig:.05},
-  leica:{n:'德味濃郁',sw:'#8B2E2E',curve:[[0,0],[.2,.13],[.5,.48],[.8,.86],[1,.98]],sat:1.08,rk:1.15,gk:.9,sh:[0,0,.01],hi:[.02,.01,-.01],grain:.015,vig:.28},
-  gpos:{n:'街拍正片',sw:'#C8913A',curve:[[0,0],[.25,.17],[.5,.5],[.75,.85],[1,1]],sat:1.2,sh:[-.01,.01,.04],hi:[.04,.025,-.03],grain:.02,vig:.15},
-  gneg:{n:'街拍負片',sw:'#8FA8A0',curve:[[0,.08],[.3,.3],[.6,.6],[1,.9]],g:[[0,.01],[.5,.52],[1,.98]],sat:.7,sh:[-.01,.03,.03],hi:[.02,.02,0],grain:.03,vig:.1},
-  portra:{n:'人像膠片',sw:'#D9A98A',curve:[[0,.05],[.25,.25],[.5,.53],[.75,.8],[1,.96]],r:[[0,.01],[.5,.52],[1,1]],b:[[0,.02],[.5,.48],[1,.94]],sat:.9,sh:[0,.01,.02],hi:[.03,.015,-.02],grain:.025,vig:.12},
-  greenneg:{n:'綠調負片',sw:'#7E9A7A',curve:[[0,.06],[.3,.28],[.6,.62],[1,.95]],r:[[0,0],[.5,.48],[1,.97]],g:[[0,.03],[.5,.52],[1,.97]],sat:.85,sh:[-.01,.03,.02],hi:[.02,.02,-.01],grain:.03,vig:.15},
-  golden:{n:'金黃日落',sw:'#E2A44A',curve:[[0,.03],[.25,.24],[.5,.54],[.75,.82],[1,.98]],r:[[0,.02],[.5,.56],[1,1]],g:[[0,0],[.5,.51],[1,.97]],b:[[0,0],[.5,.42],[1,.85]],sat:1.1,hi:[.03,.01,-.03],grain:.02,vig:.2},
-  slide:{n:'高反差正片',sw:'#2F6FB0',curve:[[0,0],[.25,.18],[.5,.5],[.75,.84],[1,1]],b:[[0,.02],[.5,.5],[1,1]],sat:1.3,sh:[0,0,.03],grain:.015,vig:.22},
-  polaroid:{n:'復古拍立得',sw:'#C9B79A',curve:[[0,.12],[.4,.42],[.75,.78],[1,.9]],r:[[0,.04],[1,1]],g:[[0,.02],[1,.97]],b:[[0,.06],[1,.86]],sat:.78,sh:[0,.02,.04],hi:[.04,.03,-.02],grain:.03,vig:.25},
-  vivid:{n:'自然鮮明',sw:'#E7A34B',curve:[[0,0],[.25,.22],[.5,.52],[.75,.8],[1,1]],sat:1.15,vig:.1},
-  milk:{n:'日系奶白',sw:'#F1E6D8',curve:[[0,.08],[.3,.38],[.6,.7],[1,.97]],sat:.8,sh:[0,.01,.02],hi:[.01,.01,-.01],grain:.015},
-  latte:{n:'奶茶暖調',sw:'#C8A07A',curve:[[0,.06],[.5,.53],[1,.96]],r:[[0,.02],[1,1]],b:[[0,0],[1,.92]],sat:.88,sh:[.02,.01,0],grain:.02,vig:.1},
-  tasty:{n:'美味暖色',sw:'#E07A3C',curve:[[0,0],[.25,.21],[.5,.53],[.75,.82],[1,1]],r:[[0,0],[.5,.53],[1,1]],b:[[0,0],[.5,.47],[1,.95]],sat:1.22,vig:.12},
-  clear:{n:'清透藍',sw:'#7FB2DE',curve:[[0,.03],[.5,.55],[1,1]],r:[[0,0],[.5,.48],[1,.97]],b:[[0,.02],[.5,.53],[1,1]],sat:1.05},
-  forest:{n:'森林綠',sw:'#6E9070',curve:[[0,.05],[.25,.24],[.6,.62],[1,.95]],g:[[0,.02],[.5,.52],[1,.98]],r:[[0,0],[.5,.49],[1,.98]],sat:.9,sh:[0,.02,.03],hi:[.03,.02,-.01],grain:.02,vig:.12},
-  film:{n:'電影灰調',sw:'#8C8A84',curve:[[0,.07],[.25,.22],[.5,.5],[.75,.79],[1,.93]],sat:.72,sh:[-.01,.02,.04],hi:[.04,.02,-.02],grain:.025,vig:.18},
-  night:{n:'夜晚提亮',sw:'#3F4A78',curve:[[0,.02],[.15,.25],[.5,.62],[1,1]],sat:1.08,sh:[0,0,.03],hi:[.03,.01,-.01]},
-  mono:{n:'黑白顆粒',sw:'#222',bw:1,curve:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
-};
-let fil='none',autoFil=false,recFil=null;
-/* monotone cubic curve through the points → 256-entry table */
-function curveTable(pts){
-  const t=new Float32Array(256);
-  if(!pts){for(let i=0;i<256;i++)t[i]=i/255;return t;}
-  const n=pts.length,x=pts.map(p=>p[0]),y=pts.map(p=>p[1]),d=[],m=[];
-  for(let i=0;i<n-1;i++)d.push((y[i+1]-y[i])/(x[i+1]-x[i]));
-  m[0]=d[0];m[n-1]=d[n-2];for(let i=1;i<n-1;i++)m[i]=d[i-1]*d[i]<=0?0:(d[i-1]+d[i])/2;
-  for(let i=0;i<n-1;i++){if(d[i]===0){m[i]=m[i+1]=0;continue;}const a=m[i]/d[i],b=m[i+1]/d[i],h=a*a+b*b;if(h>9){const k=3/Math.sqrt(h);m[i]=k*a*d[i];m[i+1]=k*b*d[i];}}
-  for(let v=0;v<256;v++){const X=v/255;let i=0;while(i<n-2&&X>x[i+1])i++;
-    const h=x[i+1]-x[i],s=(X-x[i])/h,s2=s*s,s3=s2*s;
+/* ---------- colour engine ----------
+   Pipeline: sRGB → linear light → Oklab (a perceptual space, so equal steps look equal).
+   A look = white balance (linear light) → tone curve on lightness → per-hue adjustments, vibrance and
+   skin-protected saturation → film-like density (highlights and deep shadows lose colour) → split toning.
+   Colours that land outside sRGB are brought back by lowering chroma at the same lightness and hue,
+   instead of clipping channels (clipping shifts hue and flattens detail).
+   Every look is baked once into a 33×33×33 3D LUT and applied with tetrahedral interpolation, so the
+   preview and the saved photo go through exactly the same transform. Vignette (in linear light) and
+   grain depend on position, so they run per pixel after the LUT. */
+const N=33,N2=N*N,RAD=Math.PI/180;
+const DEC=new Float32Array(256);for(let i=0;i<256;i++){const c=i/255;DEC[i]=c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);}
+const enc=x=>x<=.0031308?12.92*x:1.055*Math.pow(x,1/2.4)-.055;
+const dec=c=>c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);
+const ss=(a,b,x)=>{const t=x<=a?0:x>=b?1:(x-a)/(b-a);return t*t*(3-2*t);};
+/* smooth window around a hue (degrees) */
+const win=(h,c,w)=>{const d=Math.abs(((h-c+540)%360)-180);if(d>=w)return 0;const t=Math.cos(d/w*Math.PI/2);return t*t;};
+function lin2lab(r,g,b,o){
+  const l=Math.cbrt(.4122214708*r+.5363325363*g+.0514459929*b),m=Math.cbrt(.2119034982*r+.6806995451*g+.1073969566*b),s=Math.cbrt(.0883024619*r+.2817188376*g+.6299787005*b);
+  o[0]=.2104542553*l+.793617785*m-.0040720468*s;o[1]=1.9779984951*l-2.428592205*m+.4505937099*s;o[2]=.0259040371*l+.7827717662*m-.808675766*s;
+}
+function lab2lin(L,a,b,o){
+  let l=L+.3963377774*a+.2158037573*b,m=L-.1055613458*a-.0638541728*b,s=L-.0894841775*a-1.291485548*b;l=l*l*l;m=m*m*m;s=s*s*s;
+  o[0]=4.0767416621*l-3.3077115913*m+.2309699292*s;o[1]=-1.2684380046*l+2.6097574011*m-.3413193965*s;o[2]=-.0041960863*l-.7034186147*m+1.707614701*s;
+}
+const _t=[0,0,0],_out=t=>t[0]<-1e-4||t[1]<-1e-4||t[2]<-1e-4||t[0]>1.0001||t[1]>1.0001||t[2]>1.0001;
+/* Oklab → 8-bit sRGB (kept as float). Gamut mapping lowers chroma only, at the same lightness and hue.
+   soft: colours in the outer 20% of the gamut are compressed smoothly toward the edge, so saturated areas keep their texture
+   instead of piling up on the boundary. */
+function labToSrgb(L,a,b,out,i,soft){
+  L=L<0?0:L>1?1:L;lab2lin(L,a,b,_t);
+  let lo=0,hi=0;const o=_out(_t);
+  if(o){lo=0;hi=1;}
+  else if(soft&&(a!==0||b!==0)){lab2lin(L,a*1.25,b*1.25,_t);if(_out(_t)){lo=1;hi=1.25;}}
+  if(hi){
+    for(let n=0;n<12;n++){const m=(lo+hi)/2;lab2lin(L,a*m,b*m,_t);if(_out(_t))hi=m;else lo=m;}
+    let k=lo;                                               // lo = largest chroma scale still inside the gamut
+    if(soft&&lo>1e-3){const x=1/lo,xc=.8+.2*Math.tanh((x-.8)/.2);k=xc*lo;}
+    a*=k;b*=k;
+  }
+  lab2lin(L,a,b,_t);
+  for(let c=0;c<3;c++){const x=_t[c]<0?0:_t[c]>1?1:_t[c];out[i+c]=enc(x)*255;}
+}
+/* monotone cubic curve through the points → table with n entries over 0..1 */
+function curveTable(pts,n){
+  const t=new Float32Array(n);
+  if(!pts){for(let i=0;i<n;i++)t[i]=i/(n-1);return t;}
+  const c=pts.length,x=pts.map(p=>p[0]),y=pts.map(p=>p[1]),d=[],m=[];
+  for(let i=0;i<c-1;i++)d.push((y[i+1]-y[i])/(x[i+1]-x[i]));
+  m[0]=d[0];m[c-1]=d[c-2];for(let i=1;i<c-1;i++)m[i]=d[i-1]*d[i]<=0?0:(d[i-1]+d[i])/2;
+  for(let i=0;i<c-1;i++){if(d[i]===0){m[i]=m[i+1]=0;continue;}const a=m[i]/d[i],b=m[i+1]/d[i],h=a*a+b*b;if(h>9){const k=3/Math.sqrt(h);m[i]=k*a*d[i];m[i+1]=k*b*d[i];}}
+  for(let v=0;v<n;v++){const X=v/(n-1);let i=0;while(i<c-2&&X>x[i+1])i++;
+    const h=x[i+1]-x[i],s=Math.max(0,Math.min(1,(X-x[i])/h)),s2=s*s,s3=s2*s;
     t[v]=Math.max(0,Math.min(1,(2*s3-3*s2+1)*y[i]+(s3-2*s2+s)*h*m[i]+(-2*s3+3*s2)*y[i+1]+(s3-s2)*h*m[i+1]));}
   return t;
 }
-const lutCache={};
-function lut(key){
-  if(lutCache[key])return lutCache[key];
-  const p=FIL[key],M=curveTable(p.curve),C=[p.r,p.g,p.b].map(curveTable),out=[];
-  for(let c=0;c<3;c++){const a=new Float32Array(256);for(let i=0;i<256;i++)a[i]=C[c][Math.round(M[i]*255)]*255;out.push(a);}
-  return lutCache[key]={R:out[0],G:out[1],B:out[2],sat:p.sat==null?1:p.sat,sh:p.sh||[0,0,0],hi:p.hi||[0,0,0],grain:p.grain||0,vig:p.vig||0,bw:!!p.bw,rk:p.rk==null?1:p.rk,gk:p.gk==null?1:p.gk,bc:p.bc||0};
+const sample=(tb,x)=>{x=(x<0?0:x>1?1:x)*(tb.length-1);const i=Math.min(tb.length-2,x|0);return tb[i]+(tb[i+1]-tb[i])*(x-i);};
+/* how much a colour looks like skin (0..1): hue around orange, moderate chroma, mid lightness */
+const skinW=(L,C,h)=>win(h,55,30)*ss(.025,.06,C)*(1-ss(.2,.28,C))*ss(.25,.4,L)*(1-ss(.9,.97,L));
+
+/* Looks. Hues are Oklab hue angles: red 29, orange 55, yellow 110, green 142, cyan 195, blue 264, magenta 328.
+   c     tone curve on a grey scale, points [in,out] in 0..1 (first point above 0 = faded blacks, last below 1 = soft whites)
+   temp  white balance, + warmer / − cooler · tint: + magenta / − green (applied in linear light)
+   sat   saturation · vib: vibrance, boosts dull colours more than vivid ones
+   bands per-hue changes: h centre, w width, dh hue shift (degrees), ds saturation ×, dl lightness ×
+   sh/hi split toning [hue, amount] added to shadows / highlights
+   skin  0..1 how strongly skin tones are protected from hue and saturation changes (default .6)
+   bw    black and white with a colour filter [hue that gets lighter, strength]
+   grain film grain · vig vignette */
+const FIL={
+  none:{n:'原色',sw:'#9a9a9a'},
+  cchrome:{n:'經典正片',sw:'#7C8A8F',c:[[0,.03],[.2,.15],[.5,.5],[.8,.85],[1,.96]],sat:.82,bands:[{h:29,w:40,ds:.8},{h:255,w:55,dh:-14,ds:.85,dl:.95},{h:140,w:45,dh:-8,ds:.8}],sh:[225,.012],hi:[80,.008],grain:.02,vig:.08},
+  cneg:{n:'經典負片',sw:'#6F8C86',c:[[0,.05],[.25,.2],[.5,.5],[.75,.8],[1,.93]],sat:.8,bands:[{h:140,w:45,dh:12,ds:.8},{h:29,w:35,dl:.95},{h:255,w:50,dh:-8,ds:.82}],sh:[190,.02],hi:[70,.012],grain:.03,vig:.12},
+  velvia:{n:'鮮豔風景',sw:'#2E8B57',c:[[0,0],[.25,.19],[.5,.51],[.75,.83],[1,1]],sat:1.15,vib:.4,bands:[{h:140,w:45,ds:1.15},{h:250,w:50,ds:1.15,dl:.95}],skin:.85,vig:.15},
+  hassel:{n:'自然膚色',sw:'#D8B8A0',c:[[0,.02],[.25,.25],[.5,.52],[.75,.78],[1,.97]],sat:1,vib:.1,skin:1,hi:[70,.004],vig:.05},
+  leica:{n:'德味濃郁',sw:'#8B2E2E',c:[[0,0],[.2,.13],[.5,.48],[.8,.86],[1,.98]],sat:1.04,bands:[{h:29,w:35,ds:1.15,dl:.94},{h:140,w:45,ds:.88}],sh:[260,.006],hi:[75,.008],grain:.015,vig:.28},
+  gpos:{n:'街拍正片',sw:'#C8913A',c:[[0,0],[.25,.17],[.5,.5],[.75,.85],[1,1]],sat:1.1,vib:.2,sh:[250,.018],hi:[95,.015],grain:.02,vig:.15},
+  gneg:{n:'街拍負片',sw:'#8FA8A0',c:[[0,.08],[.3,.3],[.6,.6],[1,.9]],sat:.74,sh:[170,.016],hi:[100,.008],grain:.03,vig:.1},
+  portra:{n:'人像膠片',sw:'#D9A98A',c:[[0,.05],[.25,.25],[.5,.53],[.75,.8],[1,.96]],sat:.94,temp:.15,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[230,.008],hi:[70,.012],skin:1,grain:.025,vig:.12},
+  greenneg:{n:'綠調負片',sw:'#7E9A7A',c:[[0,.06],[.3,.28],[.6,.62],[1,.95]],sat:.86,tint:-.2,sh:[165,.02],hi:[110,.008],grain:.03,vig:.15},
+  golden:{n:'金黃日落',sw:'#E2A44A',c:[[0,.03],[.25,.24],[.5,.54],[.75,.82],[1,.98]],sat:1.05,vib:.15,temp:.5,sh:[40,.006],hi:[75,.02],grain:.02,vig:.2},
+  slide:{n:'高反差正片',sw:'#2F6FB0',c:[[0,0],[.25,.18],[.5,.5],[.75,.84],[1,1]],sat:1.12,vib:.3,bands:[{h:250,w:50,ds:1.1,dl:.92}],sh:[260,.01],grain:.015,vig:.22},
+  polaroid:{n:'復古拍立得',sw:'#C9B79A',c:[[0,.12],[.4,.42],[.75,.78],[1,.9]],sat:.8,temp:.2,sh:[215,.02],hi:[90,.02],grain:.03,vig:.25},
+  vivid:{n:'自然鮮明',sw:'#E7A34B',c:[[0,0],[.25,.22],[.5,.52],[.75,.8],[1,1]],sat:1.03,vib:.35,vig:.1},
+  milk:{n:'日系奶白',sw:'#F1E6D8',c:[[0,.08],[.3,.38],[.6,.7],[1,.97]],sat:.84,temp:-.05,sh:[240,.008],hi:[80,.006],grain:.015},
+  latte:{n:'奶茶暖調',sw:'#C8A07A',c:[[0,.06],[.5,.53],[1,.96]],sat:.9,temp:.3,sh:[50,.01],hi:[80,.01],grain:.02,vig:.1},
+  tasty:{n:'美味暖色',sw:'#E07A3C',c:[[0,0],[.25,.21],[.5,.53],[.75,.82],[1,1]],sat:1.06,vib:.3,temp:.2,bands:[{h:50,w:40,ds:1.1}],skin:.3,vig:.12},
+  clear:{n:'清透藍',sw:'#7FB2DE',c:[[0,.03],[.5,.55],[1,1]],sat:1.02,vib:.15,temp:-.3,bands:[{h:250,w:50,ds:1.1}],hi:[230,.006]},
+  forest:{n:'森林綠',sw:'#6E9070',c:[[0,.05],[.25,.24],[.6,.62],[1,.95]],sat:.94,bands:[{h:140,w:45,dh:8,ds:.95,dl:.92}],sh:[180,.015],hi:[85,.012],grain:.02,vig:.12},
+  film:{n:'電影灰調',sw:'#8C8A84',c:[[0,.07],[.25,.22],[.5,.5],[.75,.79],[1,.93]],sat:.8,sh:[205,.022],hi:[65,.015],grain:.025,vig:.18},
+  night:{n:'夜晚提亮',sw:'#3F4A78',c:[[0,.02],[.15,.25],[.5,.62],[1,1]],sat:1.05,vib:.2,sh:[265,.012],hi:[70,.01]},
+  mono:{n:'黑白顆粒',sw:'#222',bw:[70,.35],c:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
+};
+/* look → function(linear r,g,b, out lab). k = strength 0..1 (blended in Oklab) */
+function makeLook(p,k){
+  const cv=curveTable(p.c,1024),temp=p.temp||0,tint=p.tint||0;
+  let gr=1+.25*temp,gg=1-.15*tint,gb=1-.25*temp;const nrm=1/(.2126*gr+.7152*gg+.0722*gb);gr*=nrm;gg*=nrm;gb*=nrm;
+  const sat=p.sat==null?1:p.sat,vib=p.vib||0,skinP=p.skin==null?.6:p.skin,bands=p.bands||[],bw=p.bw;
+  const sh=p.sh?[Math.cos(p.sh[0]*RAD)*p.sh[1],Math.sin(p.sh[0]*RAD)*p.sh[1]]:[0,0],hi=p.hi?[Math.cos(p.hi[0]*RAD)*p.hi[1],Math.sin(p.hi[0]*RAD)*p.hi[1]]:[0,0];
+  const o0=[0,0,0],lab=[0,0,0];
+  return (R,G,B,o)=>{
+    lin2lab(R,G,B,o0);lin2lab(R*gr,G*gg,B*gb,lab);
+    const L=lab[0];let a=lab[1],b=lab[2],C=Math.hypot(a,b),h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
+    const v2=sample(cv,enc(Math.min(1,L*L*L)));let L2=Math.cbrt(dec(v2));
+    if(L>.02){const f=Math.pow(L2/L,.5);C*=f<.7?.7:f>1.35?1.35:f;}          // colourfulness follows contrast
+    if(bw){L2+=bw[1]*C*Math.cos((h-bw[0])*RAD);a=b=0;}
+    else{
+      const wsk=skinP*skinW(L,C,h),gate=ss(.015,.06,C);let dh=0,ds=1,dl=1;
+      for(const bd of bands){const w=win(h,bd.h,bd.w)*gate;if(w>0){dh+=w*(bd.dh||0);ds*=1+w*((bd.ds==null?1:bd.ds)-1);dl*=1+w*((bd.dl==null?1:bd.dl)-1);}}
+      let s=sat*(1+vib*(1-ss(0,.22,C)))*ds;
+      dh*=1-wsk;s=1+(s-1)*(1-.7*wsk);                                      // skin keeps its hue and most of its saturation
+      h+=dh;C*=s;L2*=dl;
+      C*=(1-.45*ss(.82,1,L2))*(.6+.4*ss(0,.15,L2));                        // film density: bright and very dark areas lose colour
+      const ws=(1-v2)*(1-v2),wh=v2*v2;
+      a=C*Math.cos(h*RAD)+sh[0]*ws+hi[0]*wh;b=C*Math.sin(h*RAD)+sh[1]*ws+hi[1]*wh;
+    }
+    o[0]=o0[0]+(L2-o0[0])*k;o[1]=o0[1]+(a-o0[1])*k;o[2]=o0[2]+(b-o0[2])*k;
+  };
 }
-/* ---------- 追色 (colour transfer): match mean and spread of Y, Cb, Cr to a reference photo ---------- */
-let refStats=null,refThumb=null,liveStats=null,matchK=.8;
-function statsFromData(d){
-  let n=0;const m=[0,0,0],q=[0,0,0];
-  for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];
-    const c=[.299*r+.587*g+.114*b,-.1687*r-.3313*g+.5*b,.5*r-.4187*g-.0813*b];
-    for(let j=0;j<3;j++){m[j]+=c[j];q[j]+=c[j]*c[j];}n++;}
-  return m.map((s,j)=>{const mu=s/n;return{mu,sd:Math.sqrt(Math.max(1,q[j]/n-mu*mu))};});
+function bake(fn,soft){
+  const lut=new Float32Array(N*N2*3),o=[0,0,0];let i=0;
+  for(let r=0;r<N;r++){const R=dec(r/(N-1));for(let g=0;g<N;g++){const G=dec(g/(N-1));for(let b=0;b<N;b++,i+=3){fn(R,G,dec(b/(N-1)),o);labToSrgb(o[0],o[1],o[2],lut,i,soft);}}}
+  return lut;
 }
-const sc=document.createElement('canvas');sc.width=64;sc.height=64;const sg=sc.getContext('2d',{willReadFrequently:true});
-function statsOf(src,w,h){sg.drawImage(src,0,0,w,h,0,0,64,64);return statsFromData(sg.getImageData(0,0,64,64).data);}
-function matchPixels(d,src){
-  if(!refStats||!src)return;
-  const k=matchK,A=[0,0,0],B=[0,0,0];
-  for(let j=0;j<3;j++){const ratio=Math.max(.5,Math.min(2,refStats[j].sd/src[j].sd));
-    // out = in*(1-k) + k*((in-μs)*ratio+μr)  →  out = in*A + B
-    A[j]=(1-k)+k*ratio;B[j]=k*(refStats[j].mu-src[j].mu*ratio);}
-  for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];
-    const Y=(.299*r+.587*g+.114*b)*A[0]+B[0],Cb=(-.1687*r-.3313*g+.5*b)*A[1]+B[1],Cr=(.5*r-.4187*g-.0813*b)*A[2]+B[2];
-    d[i]=Y+1.402*Cr;d[i+1]=Y-.34414*Cb-.71414*Cr;d[i+2]=Y+1.772*Cb;}
-}
-function applyFilter(g,w,h,key,srcStats){
-  if(key==='none')return;
-  if(key==='match'){
-    const img=g.getImageData(0,0,w,h);
-    matchPixels(img.data,srcStats||statsOf(g.canvas,w,h));g.putImageData(img,0,0);return;
+
+/* ---------- image statistics (used by 追色 and by the look recommendation) ---------- */
+const QP=[.01,.05,.25,.5,.75,.95,.99];
+function zoneW(L,o){if(L<=.25){o[0]=1;o[1]=0;o[2]=0;}else if(L<=.5){const t=(L-.25)*4;o[0]=1-t;o[1]=t;o[2]=0;}else if(L<=.75){const t=(L-.5)*4;o[0]=0;o[1]=1-t;o[2]=t;}else{o[0]=0;o[1]=0;o[2]=1;}}
+function labStats(d){
+  const n=d.length>>2,Ls=new Float32Array(n),A=new Float32Array(n),B=new Float32Array(n),o=[0,0,0],z=[0,0,0];
+  const za=[0,0,0],zb=[0,0,0],zs=[0,0,0];let ma=0,mb=0,mc=0,green=0,blue=0,skin=0;
+  for(let i=0,j=0;i<n;i++,j+=4){
+    lin2lab(DEC[d[j]],DEC[d[j+1]],DEC[d[j+2]],o);const L=o[0],a=o[1],b=o[2],C=Math.hypot(a,b);let h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
+    Ls[i]=L;A[i]=a;B[i]=b;ma+=a;mb+=b;mc+=C;zoneW(L,z);
+    for(let k=0;k<3;k++){za[k]+=z[k]*a;zb[k]+=z[k]*b;zs[k]+=z[k];}
+    if(C>.05&&h>112&&h<168)green++;if(C>.04&&h>212&&h<278&&L>.45)blue++;if(skinW(L,C,h)>.5)skin++;
   }
-  const L=lut(key),img=g.getImageData(0,0,w,h),d=img.data;
-  const sat=L.sat,sh=L.sh.map(v=>v*255),hi=L.hi.map(v=>v*255),gr=L.grain*255,vig=L.vig,bw=L.bw,rk=L.rk,gk=L.gk,bc=L.bc,hueOps=rk!==1||gk!==1||bc!==0;
-  const blk=Math.max(1,Math.round(w/900));   // grain clump size scales with resolution so it looks the same in preview and photo
-  const cx=w/2,cy=h/2,rr=1/(cx*cx+cy*cy);
-  let seed=(Math.random()*1e9)|0;
+  ma/=n;mb/=n;mc/=n;
+  for(let k=0;k<3;k++){if(zs[k]>n*.02){za[k]/=zs[k];zb[k]/=zs[k];}else{za[k]=ma;zb[k]=mb;}}
+  let sd=0;for(let i=0;i<n;i++){zoneW(Ls[i],z);const da=A[i]-(z[0]*za[0]+z[1]*za[1]+z[2]*za[2]),db=B[i]-(z[0]*zb[0]+z[1]*zb[1]+z[2]*zb[2]);sd+=da*da+db*db;}
+  sd=Math.sqrt(sd/n)+.004;
+  const sorted=Ls.slice().sort(),q=QP.map(p=>sorted[Math.min(n-1,Math.round(p*(n-1)))]);
+  return{q,za,zb,sd,ma,mb,mc,green:green/n,blue:blue/n,skin:skin/n};
+}
+function mixStats(a,b,t){
+  const m=(x,y)=>x+(y-x)*t,r={};
+  for(const k of ['sd','ma','mb','mc','green','blue','skin'])r[k]=m(a[k],b[k]);
+  for(const k of ['q','za','zb'])r[k]=a[k].map((x,i)=>m(x,b[k][i]));
+  return r;
+}
+/* 追色: lightness by percentile matching (slope-limited), colour by shadow/mid/highlight averages and spread */
+function makeMatch(S,R,k){
+  const pts=[];
+  for(let i=0;i<S.q.length;i++){const x=S.q[i];let y=R.q[i];
+    if(pts.length){const p=pts[pts.length-1],dx=x-p[0];if(dx<.03)continue;y=Math.min(p[1]+2.2*dx,Math.max(p[1]+.45*dx,y));}
+    else y=Math.min(x+.25,Math.max(x-.25,y));
+    pts.push([x,Math.max(0,Math.min(1,y))]);}
+  const f=pts[0],l=pts[pts.length-1];
+  if(f[0]>.005)pts.unshift([0,Math.max(0,Math.min(f[1],f[1]-f[0]))]);else f[0]=0;
+  if(l[0]<.995)pts.push([1,Math.min(1,Math.max(l[1],l[1]+1-l[0]))]);else l[0]=1;
+  const cv=curveTable(pts,1024),sg=Math.max(.6,Math.min(1.6,R.sd/S.sd)),z=[0,0,0],lab=[0,0,0];
+  return (Rl,Gl,Bl,o)=>{
+    lin2lab(Rl,Gl,Bl,lab);const L=lab[0],a=lab[1],b=lab[2],L2=sample(cv,L);
+    zoneW(L,z);const sa=z[0]*S.za[0]+z[1]*S.za[1]+z[2]*S.za[2],sb=z[0]*S.zb[0]+z[1]*S.zb[1]+z[2]*S.zb[2];
+    zoneW(L2,z);let oa=z[0]*R.za[0]+z[1]*R.za[1]+z[2]*R.za[2]-sa,ob=z[0]*R.zb[0]+z[1]*R.zb[1]+z[2]*R.zb[2]-sb;
+    const om=Math.hypot(oa,ob);if(om>.1){oa*=.1/om;ob*=.1/om;}                 // never push the cast further than this
+    const C=Math.hypot(a,b);let h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
+    const kc=k*(1-.5*skinW(L,C,h)),a2=sa+oa+(a-sa)*sg,b2=sb+ob+(b-sb)*sg;       // skin moves half as far
+    o[0]=L+(L2-L)*k;o[1]=a+(a2-a)*kc;o[2]=b+(b2-b)*kc;
+  };
+}
+/* which look suits this scene */
+function recommend(s,cat){
+  const p50=s.q[3],range=s.q[5]-s.q[1];
+  if(p50<.32)return['night','畫面偏暗'];
+  if(cat==='people'&&s.skin>.04)return s.mb>.035?['portra','暖光人像']:['hassel','有膚色，保持自然'];
+  if(cat==='food')return s.mc<.03?['milk','食物顏色偏淡']:['tasty','暖一點更可口'];
+  if(s.green>.3)return cat==='scene'?['velvia','綠色很多']:['forest','綠色很多'];
+  if(s.blue>.3)return cat==='scene'?['slide','藍天很多']:['clear','藍色很多'];
+  if(s.mb>.06&&s.ma>0)return['golden','暖色光線，像夕陽'];
+  if(s.skin>.08)return['portra','畫面有膚色'];
+  if(s.mc<.03)return p50>.7?['milk','畫面很亮、顏色淡']:['film','顏色偏灰'];
+  if(range<.35)return['vivid','反差偏低'];
+  if(range>.75)return['cchrome','光比大、陰影深'];
+  return cat==='scene'?['cchrome','光線正常']:['vivid','光線正常'];
+}
+
+/* ---------- apply a LUT to RGBA pixels (a full image or one horizontal strip of it) ---------- */
+const LI=new Uint16Array(256),LF=new Float32Array(256);for(let i=0;i<256;i++){const x=i*(N-1)/255;let k=x|0;if(k>N-2)k=N-2;LI[i]=k;LF[i]=x-k;}
+function applyLUT(d,w,h,y0,W,H,lut,fx,seed){
+  const gr=(fx.grain||0)*255,vig=fx.vig||0,blk=Math.max(1,Math.round(W/900)),dR=N2*3,dG=N*3;
+  let VT=null;
+  if(vig>0){VT=new Float32Array(258);const a=1/Math.sqrt(Math.pow(1-vig,2.2))-1;for(let i=0;i<258;i++){const q=1+a*i/256;VT[i]=Math.pow(1/(q*q),1/2.2);}}   // falloff in linear light, stored for encoded values
+  const cx=W/2,cy=H/2,rr=256/(cx*cx+cy*cy);let s=seed|0;
   for(let y=0,i=0;y<h;y++){
-    const dy2=(y-cy)*(y-cy),by=(y/blk)|0;
+    const Y=y+y0,dy2=(Y-cy)*(Y-cy),by=(Y/blk)|0;
     for(let x=0;x<w;x++,i+=4){
-      let r=L.R[d[i]],gg=L.G[d[i+1]],b=L.B[d[i+2]];
-      let l=.299*r+.587*gg+.114*b;
-      if(bw){r=gg=b=l;}
-      else{
-        const t=l/255,ws=(1-t)*(1-t),wh=t*t;
-        r+=sh[0]*ws+hi[0]*wh;gg+=sh[1]*ws+hi[1]*wh;b+=sh[2]*ws+hi[2]*wh;
-        if(sat!==1){l=.299*r+.587*gg+.114*b;r=l+(r-l)*sat;gg=l+(gg-l)*sat;b=l+(b-l)*sat;}
-        if(hueOps){
-          const er=r-(gg>b?gg:b);if(er>0&&rk!==1)r=r-er+er*rk;          // reds: mute (<1) or deepen (>1)
-          const eg=gg-(r>b?r:b);if(eg>0&&gk!==1)gg=gg-eg+eg*gk;        // greens
-          const eb=b-(r>gg?r:gg);if(eb>0&&bc)gg+=eb*bc;                // blues lean cyan
-        }
-      }
-      if(vig){const k=1-vig*((x-cx)*(x-cx)+dy2)*rr;r*=k;gg*=k;b*=k;}
-      if(gr){let hsh=(((x/blk)|0)*73856093)^(by*19349663)^seed;hsh=Math.imul(hsh^(hsh>>>15),2246822519);hsh^=hsh>>>13;
-        const nz=((hsh&1023)/1023-.5)*gr*2*(1-Math.abs(l/255-.5));r+=nz;gg+=nz;b+=nz;}
-      d[i]=r;d[i+1]=gg;d[i+2]=b;
+      const r=d[i],g=d[i+1],b=d[i+2],fr=LF[r],fg=LF[g],fb=LF[b],c0=(LI[r]*N2+LI[g]*N+LI[b])*3,c3=c0+dR+dG+3;
+      let c1,c2,w0,w1,w2,w3;
+      if(fr>fg){if(fg>fb){c1=c0+dR;c2=c1+dG;w0=1-fr;w1=fr-fg;w2=fg-fb;w3=fb;}
+        else if(fr>fb){c1=c0+dR;c2=c1+3;w0=1-fr;w1=fr-fb;w2=fb-fg;w3=fg;}
+        else{c1=c0+3;c2=c1+dR;w0=1-fb;w1=fb-fr;w2=fr-fg;w3=fg;}}
+      else{if(fb>fg){c1=c0+3;c2=c1+dG;w0=1-fb;w1=fb-fg;w2=fg-fr;w3=fr;}
+        else if(fb>fr){c1=c0+dG;c2=c1+3;w0=1-fg;w1=fg-fb;w2=fb-fr;w3=fr;}
+        else{c1=c0+dG;c2=c1+dR;w0=1-fg;w1=fg-fr;w2=fr-fb;w3=fb;}}
+      let R=w0*lut[c0]+w1*lut[c1]+w2*lut[c2]+w3*lut[c3],G=w0*lut[c0+1]+w1*lut[c1+1]+w2*lut[c2+1]+w3*lut[c3+1],B=w0*lut[c0+2]+w1*lut[c1+2]+w2*lut[c2+2]+w3*lut[c3+2];
+      if(VT){const k=VT[(((x-cx)*(x-cx)+dy2)*rr)|0];R*=k;G*=k;B*=k;}
+      let nz;
+      if(gr){let hs=(((x/blk)|0)*73856093)^(by*19349663)^s;hs=Math.imul(hs^(hs>>>15),2246822519);hs^=hs>>>13;
+        const l=(.2126*R+.7152*G+.0722*B)/255;nz=(((hs&1023)+((hs>>>10)&1023))/1023-1)*gr*(.35+2.6*l*(1-l));}   // grain strongest in midtones
+      else{s=(Math.imul(s,1664525)+1013904223)|0;nz=((s>>>16)&255)/255-.5;}                                    // dither to avoid banding
+      d[i]=R+nz;d[i+1]=G+nz;d[i+2]=B+nz;
     }
   }
-  g.putImageData(img,0,0);
 }
+
 function crop(vw,vh){const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
+
+/* ---------- current look ---------- */
+let fil='none',autoFil=false,recFil=null,lookK=1,matchK=.8;
+let refStats=null,refThumb=null,liveStats=null,matchLUT=null;
+const lutCache=new Map();
+function lookLUT(key){
+  const id=key+'@'+Math.round(lookK*20);let l=lutCache.get(id);
+  if(!l){if(lutCache.size>10)lutCache.clear();l=bake(makeLook(FIL[key],Math.round(lookK*20)/20),true);lutCache.set(id,l);}
+  return l;
+}
+function rebuildMatch(){matchLUT=refStats&&liveStats?bake(makeMatch(liveStats,refStats,matchK)):null;}
+function currentLUT(){return fil==='none'?null:fil==='match'?matchLUT:lookLUT(fil);}
+function currentFX(){const p=fil==='match'||fil==='none'?{}:FIL[fil];return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK};}
+const sc=document.createElement('canvas');sc.width=96;sc.height=96;const sg=sc.getContext('2d',{willReadFrequently:true});
+function statsOf(src,sx,sy,sw,sh){sg.drawImage(src,sx,sy,sw,sh,0,0,96,96);return labStats(sg.getImageData(0,0,96,96).data);}
 
 /* filter chips */
 function buildFbar(){
@@ -512,79 +637,95 @@ function buildFbar(){
   // 追色 chip: first tap picks a reference photo, later taps select it; tap again while selected to change photo
   const m=document.createElement('button');m.setAttribute('aria-pressed',fil==='match');
   m.innerHTML=refThumb?`<img src="${refThumb}" alt="" style="width:16px;height:16px;border-radius:4px;object-fit:cover;vertical-align:-3px;margin-right:6px">追色`:'＋ 追色';
-  m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;buildFbar();};
+  m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;rebuildMatch();buildFbar();};
   box.appendChild(m);
-  $('matchRow').hidden=fil!=='match';
   Object.entries(FIL).forEach(([k,p])=>{
     const b=document.createElement('button');b.innerHTML=`<span class="sw" style="background:${p.sw}"></span>${p.n}`;
-    b.setAttribute('aria-pressed',fil===k&&!(autoFil&&k!==fil));if(k===recFil)b.classList.add('rec');
+    b.setAttribute('aria-pressed',fil===k);if(k===recFil)b.classList.add('rec');
     b.onclick=()=>{fil=k;autoFil=false;buildFbar();};box.appendChild(b);
   });
-  $('pc').hidden=fil==='none';
+  $('matchRow').hidden=fil==='none';
+  const kv=Math.round((fil==='match'?matchK:lookK)*100);$('matchK').value=kv;$('matchOut').textContent=kv;
 }
+let kT=0;
+$('matchK').oninput=e=>{
+  const k=e.target.value/100;$('matchOut').textContent=e.target.value;
+  if(fil==='match'){matchK=k;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildMatch);}else lookK=k;
+};
 
-/* analyse the scene about once a second: average brightness, warmth, saturation, greenness */
-const an=document.createElement('canvas');an.width=48;an.height=64;const ag=an.getContext('2d',{willReadFrequently:true});
+/* measure the scene about once a second (in Oklab): feeds the recommendation and 追色 */
 function analyse(){
-  if(!stream||!v.videoWidth)return;
-  const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight);ag.drawImage(v,sx,sy,sw,sh,0,0,48,64);
-  const d=ag.getImageData(0,0,48,64).data;let L=0,warm=0,S=0,green=0,n=d.length/4;
-  for(let i=0;i<d.length;i+=4){const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
-    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);L+=.299*r+.587*g+.114*b;S+=mx?(mx-mn)/mx:0;warm+=r-b;if(g>r*1.08&&g>b*1.08)green++;}
-  L/=n;S/=n;warm/=n;green/=n;
-  let k,why;
-  if(L<.28){k='night';why='畫面偏暗';}
-  else if(green>.35){k='forest';why='綠色很多';}
-  else if(warm<-.04){k='clear';why='畫面偏藍';}
-  else if(cat==='food'&&warm>.04){k='tasty';why='食物偏暖色';}
-  else if(L>.66&&S<.3){k='milk';why='畫面很亮、顏色淡';}
-  else if(warm>.14&&L>.4){k='golden';why='暖色光線，像夕陽';}
-  else if(warm>.08){k=cat==='people'?'portra':'latte';why='畫面偏暖';}
-  else if(S<.14){k='film';why='顏色偏灰';}
-  else if(cat==='scene'&&S>.3){k='slide';why='顏色飽和、光線好';}
-  else{k='vivid';why='光線正常';}
+  if(!stream||!v.videoWidth||document.hidden)return;
+  const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight),s=statsOf(v,sx,sy,sw,sh);
+  liveStats=liveStats?mixStats(liveStats,s,.4):s;              // smoothed so the look doesn't pump while panning
+  if(fil==='match')rebuildMatch();
+  const [k,why]=recommend(liveStats,cat);
   if(k!==recFil){recFil=k;if(autoFil)fil=k;buildFbar();}
   $('hint').dataset.rec=`${why}，推薦「${FIL[k].n}」`;
   if(!hintT)$('hint').textContent=$('hint').dataset.rec;
 }
-setInterval(analyse,1000);
+setInterval(analyse,900);
 
 $('matchIn').onchange=async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   try{
     const bmp=await createImageBitmap(f);
-    refStats=statsOf(bmp,bmp.width,bmp.height);
+    refStats=statsOf(bmp,0,0,bmp.width,bmp.height);
     const t=document.createElement('canvas');t.width=t.height=48;
     const s=Math.min(bmp.width,bmp.height);t.getContext('2d').drawImage(bmp,(bmp.width-s)/2,(bmp.height-s)/2,s,s,0,0,48,48);
     refThumb=t.toDataURL('image/jpeg',.7);
-    fil='match';autoFil=false;buildFbar();hint('已套用參考照片的色調，再點一次「追色」可以換照片。');
+    fil='match';autoFil=false;rebuildMatch();buildFbar();hint('已套用參考照片的色調，再點一次「追色」可以換照片。');
   }catch(err){hint('這張照片打不開，換一張試試。');}
 };
-$('matchK').oninput=e=>{matchK=e.target.value/100;$('matchOut').textContent=e.target.value;};
 
-/* live preview with the filter, drawn small for speed */
-const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true});
+/* live preview: same LUT as the photo, at a size the phone can keep smooth */
+const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true}),PW=[300,360,480];
+let pi=1,pms=12,frame=0;
 function loop(){
-  if(stream&&v.videoWidth&&fil!=='none'){
-    const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight);const W=360,H=480;
+  const lut=stream&&v.videoWidth?currentLUT():null;
+  if(pc.hidden!==!lut)pc.hidden=!lut;
+  if(lut){
+    const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight),W=PW[pi],H=W*4/3;
     if(pc.width!==W){pc.width=W;pc.height=H;}
     pg.save();if(facing==='user'){pg.translate(W,0);pg.scale(-1,1);}
-    pg.drawImage(v,sx,sy,sw,sh,0,0,W,H);pg.restore();applyFilter(pg,W,H,fil);
+    pg.drawImage(v,sx,sy,sw,sh,0,0,W,H);pg.restore();
+    const t=performance.now(),img=pg.getImageData(0,0,W,H);
+    applyLUT(img.data,W,H,0,W,H,lut,currentFX(),++frame*7919);pg.putImageData(img,0,0);
+    pms=pms*.9+(performance.now()-t)*.1;
+    if(pms>24&&pi>0){pi--;pms=13;}else if(pms<7&&pi<2){pi++;pms=13;}
   }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 buildFbar();
 
-/* ---------- capture: crops to exactly what the viewfinder shows, guides not included, filter applied ---------- */
+/* ---------- capture: crops to exactly what the viewfinder shows, guides not included ---------- */
 let lastBlob=null,lastURL=null;
+const MAXEDGE=4608;   // 16 MP at 4:3, inside every phone's canvas limit
+function toCanvas(src,sx,sy,sw,sh,mirror){
+  const k=Math.min(1,MAXEDGE/Math.max(sw,sh)),c=document.createElement('canvas');c.width=Math.round(sw*k);c.height=Math.round(sh*k);
+  const g=c.getContext('2d',{willReadFrequently:true});g.imageSmoothingQuality='high';
+  if(mirror){g.translate(c.width,0);g.scale(-1,1);}
+  g.drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);g.setTransform(1,0,0,1,0,0);return c;
+}
+/* apply the current look at full size, in strips so memory stays low and the page stays responsive */
+async function develop(c,srcStats){
+  let lut=currentLUT();
+  if(fil==='match'&&refStats&&srcStats)lut=bake(makeMatch(srcStats,refStats,matchK),true);
+  if(!lut)return c;
+  const g=c.getContext('2d'),w=c.width,h=c.height,fx=currentFX(),seed=(Math.random()*1e9)|0,rows=Math.max(16,Math.floor(1048576/w));
+  $('busy').hidden=false;await new Promise(r=>setTimeout(r,30));
+  try{
+    for(let y=0,n=0;y<h;y+=rows,n++){
+      const hh=Math.min(rows,h-y),img=g.getImageData(0,y,w,hh);applyLUT(img.data,w,hh,y,w,h,lut,fx,seed+y);g.putImageData(img,0,y);
+      if(n%4===3)await new Promise(r=>setTimeout(r));
+    }
+  }finally{$('busy').hidden=true;}
+  return c;
+}
 function grab(){
   const vw=v.videoWidth,vh=v.videoHeight;if(!vw)return null;
-  const [sx,sy,sw,sh]=crop(vw,vh);
-  const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d',{willReadFrequently:true});
-  if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
-  g.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
-  g.setTransform(1,0,0,1,0,0);applyFilter(g,c.width,c.height,fil);return c;
+  const [sx,sy,sw,sh]=crop(vw,vh);return toCanvas(v,sx,sy,sw,sh,facing==='user');
 }
 /* Native still photo (Android Chrome etc.): full sensor resolution, cropped to 3:4 */
 async function grabPhoto(){
@@ -592,30 +733,28 @@ async function grabPhoto(){
   try{
     const blob=await imgCap.takePhoto(photoSet||undefined);const bmp=await createImageBitmap(blob);
     if(curZoom&&stream){stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:curZoom}]}).catch(()=>{});}
-    const [sx,sy,sw,sh]=crop(bmp.width,bmp.height);
-    const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d',{willReadFrequently:true});
-    if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
-    g.drawImage(bmp,sx,sy,sw,sh,0,0,c.width,c.height);g.setTransform(1,0,0,1,0,0);
-    applyFilter(g,c.width,c.height,fil);return c;
+    const [sx,sy,sw,sh]=crop(bmp.width,bmp.height);return toCanvas(bmp,sx,sy,sw,sh,facing==='user');
   }catch(e){imgCap=null;showRes();return null;}
 }
 function finish(c){
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
+let shooting=false;
 async function shoot(){
-  if(!stream)return;
-  if(timer){const el=$('count');el.hidden=false;for(let i=3;i>0;i--){el.textContent=i;await new Promise(r=>setTimeout(r,1000));}el.hidden=true;}
-  $('flash').style.opacity=.8;setTimeout(()=>$('flash').style.opacity=0,80);
-  const c=(await grabPhoto())||grab();if(!c)return;finish(c);
+  if(!stream||shooting)return;shooting=true;
+  try{
+    if(timer){const el=$('count');el.hidden=false;for(let i=3;i>0;i--){el.textContent=i;await new Promise(r=>setTimeout(r,1000));}el.hidden=true;}
+    $('flash').style.opacity=.8;setTimeout(()=>$('flash').style.opacity=0,80);
+    const c=(await grabPhoto())||grab();if(c)finish(await develop(c));     // the look you saw in the preview is the one applied
+  }finally{shooting=false;}
 }
-/* 高畫質: hand off to the phone's own camera app (full HDR/night processing), then apply the chosen filter */
+/* 內建相機: hand off to the phone's own camera app, then apply the chosen look */
 $('hqIn').onchange=async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   try{
-    const bmp=await createImageBitmap(f);
-    const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;const g=c.getContext('2d',{willReadFrequently:true});
-    g.drawImage(bmp,0,0);applyFilter(g,c.width,c.height,fil);finish(c);
+    const bmp=await createImageBitmap(f),c=toCanvas(bmp,0,0,bmp.width,bmp.height,false);
+    finish(await develop(c,fil==='match'?statsOf(c,0,0,c.width,c.height):null));
   }catch(err){hint('這張照片打不開，請再拍一次。');}
 };
 function openReview(){$('rImg').src=lastURL;$('review').hidden=false;}
