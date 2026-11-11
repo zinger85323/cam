@@ -20,7 +20,7 @@ html,body{margin:0;height:100%;height:100dvh;background:var(--bg);color:var(--in
 body{position:fixed;inset:0;overflow-y:auto;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);user-select:none;-webkit-user-select:none}
 /* toolbar only: the app name and version line are hidden; the buttons stay on one row */
 .top{display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:8px max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px));font-size:13px}
-.top>div:first-child{display:none}
+.top>div:first-child{display:none!important}
 .top>div:last-child{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
 .top .ibtn{white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:13px}
 .top b{font-size:16px;letter-spacing:.06em}
@@ -61,12 +61,19 @@ body.lscape.cp #fixRow,body.lscape.cp #matchRow{bottom:104px}
 body.fill:not(.lscape) .vf{aspect-ratio:auto;flex:1 1 auto;min-height:0;max-height:none}
 /* color panel: hidden until 調色 is tapped */
 body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow{display:none!important}
-.fbar{display:flex;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
+.fbar{display:flex;align-items:center;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
 .fbar::-webkit-scrollbar{display:none}
 .fbar button{flex:0 0 auto;position:relative;background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 13px;font:500 13px var(--f)}
 .fbar button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .fbar button.rec::after{content:"推薦";position:absolute;top:-6px;right:-4px;font-size:9px;font-weight:700;background:var(--accent);color:#1a1408;padding:1px 5px;border-radius:99px}
 .fbar .sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+/* look cards: each look shown on the live frame, name underneath; the chosen one gets an outline */
+.fbar button.th{display:flex;flex-direction:column;align-items:center;gap:5px;background:none;color:var(--muted);padding:3px;border-radius:12px;font:500 11px var(--f)}
+.fbar button.th[aria-pressed="true"]{background:none;color:var(--ink)}
+.fbar .tw{display:block;width:64px;height:80px;border-radius:9px;overflow:hidden;outline:2px solid transparent;outline-offset:2px}
+.fbar .tw img{display:block;width:100%;height:100%;object-fit:cover}
+.fbar button.th[aria-pressed="true"] .tw{outline-color:var(--ink)}
+.fbar button.th.rec::after{top:-2px;right:0}
 .vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .vf video.mirror{transform:scaleX(-1)}
 .vf canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -116,7 +123,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-13</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-16</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -353,7 +360,7 @@ function syncStrip(){
   const b=$('stripBtn'),t=cat!=='ref'&&TPL[cat][cur];
   $('strip').hidden=cat==='ref'||!stripOpen;
   b.hidden=cat==='ref';
-  b.textContent=(t?t.n:'')+(stripOpen?' ▴':' ▾');b.setAttribute('aria-expanded',stripOpen);
+  b.textContent=(t?t.n:'')+(stripOpen?' ▴':' ▾');b.setAttribute('aria-expanded',stripOpen);fitVF();
 }
 $('stripBtn').onclick=()=>{stripOpen=!stripOpen;syncStrip();};
 function buildStrip(){
@@ -514,14 +521,27 @@ $('startBtn').onclick=async()=>{
 };
 $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment';curLens='1';
   try{await open(facing==='environment'&&lensMap['1']?lensMap['1'].id:undefined);}catch(e){}lensButtons();};
-$('colorBtn').onclick=()=>{const on=document.body.classList.toggle('cp');$('colorBtn').setAttribute('aria-pressed',on);};
+$('colorBtn').onclick=()=>{const on=document.body.classList.toggle('cp');$('colorBtn').setAttribute('aria-pressed',on);if(on)refreshThumbs();fitVF();};
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
 // the landscape left column folds away into 選項; tapping again shows it
 let lcol=false;
 $('lcBtn').onclick=()=>{lcol=!lcol;document.body.classList.toggle('lcol',lcol);
   $('lcBtn').textContent=lcol?'收起 ◂':'選項 ▸';$('lcBtn').setAttribute('aria-expanded',lcol);};
 // turning the phone sideways switches to the landscape layout automatically (no button)
-function orient(){land=innerWidth>innerHeight;document.body.classList.toggle('lscape',land);pc.width=0;sizeCanvas();draw();}
+/* portrait: the viewfinder takes exactly the height left over by the rows around it, so the shutter row
+   always sits at the bottom of the screen (measured, not left to CSS flex, which some browsers get wrong) */
+function fitVF(){
+  if(land){vf.style.height='';return;}
+  let used=0;
+  for(const el of document.body.children){
+    if(el===vf||el.tagName==='SCRIPT'||el.tagName==='INPUT'||el.hidden)continue;
+    const cs=getComputedStyle(el);if(cs.display==='none'||cs.position==='fixed')continue;
+    used+=el.offsetHeight+(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);
+  }
+  const bcs=getComputedStyle(document.body),pad=(parseFloat(bcs.paddingTop)||0)+(parseFloat(bcs.paddingBottom)||0);
+  vf.style.height=Math.max(200,innerHeight-pad-used)+'px';
+}
+function orient(){land=innerWidth>innerHeight;document.body.classList.toggle('lscape',land);pc.width=0;fitVF();sizeCanvas();draw();}
 addEventListener('resize',orient);
 $('fillBtn').onclick=()=>{rIdx=(rIdx+1)%RATIOS.length;
   $('fillBtn').setAttribute('aria-pressed',rIdx>0);$('fillBtn').textContent=RATIOS[rIdx][0];pc.width=0;sizeCanvas();draw();};
@@ -850,12 +870,32 @@ function buildFbar(){
   m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;rebuildMatch();buildFbar();};
   box.appendChild(m);
   Object.entries(FIL).forEach(([k,p])=>{
-    const b=document.createElement('button');b.innerHTML=`<span class="sw" style="background:${p.sw}"></span>${p.n}`;
-    b.setAttribute('aria-pressed',fil===k);if(k===recFil)b.classList.add('rec');
+    const b=document.createElement('button');b.className='th'+(k===recFil?' rec':'');
+    b.innerHTML=`<span class="tw" data-k="${k}" style="background:${p.sw}">${thumbs[k]?`<img src="${thumbs[k]}" alt="">`:''}</span><span class="tl">${p.n}</span>`;
+    b.setAttribute('aria-pressed',fil===k);
     b.onclick=()=>{fil=k;autoFil=false;buildFbar();};box.appendChild(b);
   });
   $('matchRow').hidden=fil==='none';showRes();
   const kv=Math.round((fil==='match'?matchK:lookK)*100);$('matchK').value=kv;$('matchOut').textContent=kv;
+}
+/* look cards: the live frame with each look applied, filled in one at a time so the panel stays responsive */
+const TW=64,TH=80;const thCv=document.createElement('canvas');thCv.width=TW;thCv.height=TH;
+const thG=thCv.getContext('2d',{willReadFrequently:true});
+let thumbs={},thumbRun=0;
+function refreshThumbs(){
+  const v=$('v'),run=++thumbRun;thumbs={};
+  if(!stream||!v.videoWidth)return;
+  const s=Math.max(TW/v.videoWidth,TH/v.videoHeight),w=v.videoWidth*s,h=v.videoHeight*s;
+  thG.drawImage(v,(TW-w)/2,(TH-h)/2,w,h);const base=thG.getImageData(0,0,TW,TH).data;
+  const keys=Object.keys(FIL);let i=0;
+  const step=()=>{
+    if(run!==thumbRun||i>=keys.length)return;const k=keys[i++];
+    const d=new Uint8ClampedArray(base);
+    applyLUT(d,TW,TH,0,TW,TH,lookLUT(k),{grain:0,vig:(FIL[k].vig||0)*lookK},1,null);
+    thG.putImageData(new ImageData(d,TW,TH),0,0);thumbs[k]=thCv.toDataURL('image/jpeg',.8);
+    document.querySelectorAll(`.tw[data-k="${k}"]`).forEach(el=>{el.innerHTML=`<img src="${thumbs[k]}" alt="">`;});
+    setTimeout(step,0);};
+  step();
 }
 let kT=0;
 $('matchK').oninput=e=>{
