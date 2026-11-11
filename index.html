@@ -21,8 +21,8 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 .top b{font-size:16px;letter-spacing:.06em}
 .ibtn{background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 12px;font:inherit;font-size:13px}
 .ibtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 344px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
-@supports not (height:100dvh){.vf{max-height:calc(100vh - 344px)}}
+.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
+@supports not (height:100dvh){.vf{max-height:calc(100vh - 408px)}}
 .fbar{display:flex;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
 .fbar::-webkit-scrollbar{display:none}
 .fbar button{flex:0 0 auto;position:relative;background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 13px;font:500 13px var(--f)}
@@ -50,7 +50,7 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 .tabs{display:flex;justify-content:center;gap:6px;padding:6px 14px 0}
 .tabs button{background:none;border:0;color:var(--muted);font:600 14px var(--f);padding:6px 12px;border-radius:99px;letter-spacing:.06em}
 .tabs button[aria-pressed="true"]{color:var(--bg);background:var(--accent)}
-.strip{display:flex;gap:10px;overflow-x:auto;padding:8px max(14px,env(safe-area-inset-left,0px)) 6px;scrollbar-width:none;min-height:104px}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:8px max(14px,env(safe-area-inset-left,0px)) 6px;scrollbar-width:none;min-height:122px}
 .strip::-webkit-scrollbar{display:none}
 .tpl{flex:0 0 auto;width:66px;border:0;padding:0;background:none;color:var(--ink);font:inherit;font-size:11px;display:flex;flex-direction:column;gap:5px;align-items:center;line-height:1.25;text-align:center}
 .tpl canvas{width:66px;height:88px;border-radius:10px;background:#2A2330;display:block}
@@ -122,6 +122,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="row"><span>透明度</span><input id="refOp" type="range" min="10" max="80" value="40"></div>
 </div>
 
+<div class="refbox" id="fixRow">
+  <div class="row"><span style="min-width:4.2em">白平衡</span><input id="awbK" type="range" min="0" max="100" step="5" value="0"><output id="awbOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">0</output></div>
+  <div class="row"><span style="min-width:4.2em">亮暗修復</span><input id="sdK" type="range" min="0" max="100" step="5" value="0"><output id="sdOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">0</output></div>
+</div>
 <div class="shoot">
   <img class="thumb l" id="thumb" alt="" hidden>
   <span class="l" id="thumbPh"></span>
@@ -526,8 +530,9 @@ const QP=[.01,.05,.25,.5,.75,.95,.99];
 function zoneW(L,o){if(L<=.25){o[0]=1;o[1]=0;o[2]=0;}else if(L<=.5){const t=(L-.25)*4;o[0]=1-t;o[1]=t;o[2]=0;}else if(L<=.75){const t=(L-.5)*4;o[0]=0;o[1]=1-t;o[2]=t;}else{o[0]=0;o[1]=0;o[2]=1;}}
 function labStats(d){
   const n=d.length>>2,Ls=new Float32Array(n),A=new Float32Array(n),B=new Float32Array(n),o=[0,0,0],z=[0,0,0];
-  const za=[0,0,0],zb=[0,0,0],zs=[0,0,0];let ma=0,mb=0,mc=0,green=0,blue=0,skin=0;
+  const za=[0,0,0],zb=[0,0,0],zs=[0,0,0];let ma=0,mb=0,mc=0,green=0,blue=0,skin=0,SR=0,SG=0,SB=0;
   for(let i=0,j=0;i<n;i++,j+=4){
+    SR+=DEC[d[j]];SG+=DEC[d[j+1]];SB+=DEC[d[j+2]];
     lin2lab(DEC[d[j]],DEC[d[j+1]],DEC[d[j+2]],o);const L=o[0],a=o[1],b=o[2],C=Math.hypot(a,b);let h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
     Ls[i]=L;A[i]=a;B[i]=b;ma+=a;mb+=b;mc+=C;zoneW(L,z);
     for(let k=0;k<3;k++){za[k]+=z[k]*a;zb[k]+=z[k]*b;zs[k]+=z[k];}
@@ -538,11 +543,11 @@ function labStats(d){
   let sd=0;for(let i=0;i<n;i++){zoneW(Ls[i],z);const da=A[i]-(z[0]*za[0]+z[1]*za[1]+z[2]*za[2]),db=B[i]-(z[0]*zb[0]+z[1]*zb[1]+z[2]*zb[2]);sd+=da*da+db*db;}
   sd=Math.sqrt(sd/n)+.004;
   const sorted=Ls.slice().sort(),q=QP.map(p=>sorted[Math.min(n-1,Math.round(p*(n-1)))]);
-  return{q,za,zb,sd,ma,mb,mc,green:green/n,blue:blue/n,skin:skin/n};
+  return{q,za,zb,sd,ma,mb,mc,green:green/n,blue:blue/n,skin:skin/n,lr:SR/n,lg:SG/n,lb:SB/n};
 }
 function mixStats(a,b,t){
   const m=(x,y)=>x+(y-x)*t,r={};
-  for(const k of ['sd','ma','mb','mc','green','blue','skin'])r[k]=m(a[k],b[k]);
+  for(const k of ['sd','ma','mb','mc','green','blue','skin','lr','lg','lb'])r[k]=m(a[k],b[k]);
   for(const k of ['q','za','zb'])r[k]=a[k].map((x,i)=>m(x,b[k][i]));
   return r;
 }
@@ -585,15 +590,24 @@ function recommend(s,cat){
 
 /* ---------- apply a LUT to RGBA pixels (a full image or one horizontal strip of it) ---------- */
 const LI=new Uint16Array(256),LF=new Float32Array(256);for(let i=0;i<256;i++){const x=i*(N-1)/255;let k=x|0;if(k>N-2)k=N-2;LI[i]=k;LF[i]=x-k;}
-function applyLUT(d,w,h,y0,W,H,lut,fx,seed){
+function applyLUT(d,w,h,y0,W,H,lut,fx,seed,pre){
   const gr=(fx.grain||0)*255,vig=fx.vig||0,blk=Math.max(1,Math.round(W/900)),dR=N2*3,dG=N*3;
   let VT=null;
-  if(vig>0){VT=new Float32Array(258);const a=1/Math.sqrt(Math.pow(1-vig,2.2))-1;for(let i=0;i<258;i++){const q=1+a*i/256;VT[i]=Math.pow(1/(q*q),1/2.2);}}   // falloff in linear light, stored for encoded values
+  if(vig>0){VT=new Float32Array(258);const a=1/Math.sqrt(Math.pow(1-vig,2.2))-1;for(let i=0;i<258;i++){const q=1+a*i/256;VT[i]=Math.pow(1/(q*q),1/2.2);}}
   const cx=W/2,cy=H/2,rr=256/(cx*cx+cy*cy);let s=seed|0;
+  const pr=pre||null,pmap=pr?pr.map:null,mw=pr?pr.mw:0,mh=pr?pr.mh:0,pwg=pr?pr.gr:1,pgg=pr?pr.gg:1,pbg=pr?pr.gb:1,psh=pr?pr.sh:0,phi=pr?pr.hi:0;
   for(let y=0,i=0;y<h;y++){
-    const Y=y+y0,dy2=(Y-cy)*(Y-cy),by=(Y/blk)|0;
+    const Y=y+y0,dy2=(Y-cy)*(Y-cy),by=(Y/blk)|0,my=pmap?((Y*mh/H)|0)*mw:0;
     for(let x=0;x<w;x++,i+=4){
-      const r=d[i],g=d[i+1],b=d[i+2],fr=LF[r],fg=LF[g],fb=LF[b],c0=(LI[r]*N2+LI[g]*N+LI[b])*3,c3=c0+dR+dG+3;
+      let r=d[i],g=d[i+1],b=d[i+2];
+      if(pr){
+        r*=pwg;g*=pgg;b*=pbg;                                   // grey-world gains
+        if(pmap){const M=pmap[my+((x*mw/W)|0)],Lp=(.2126*r+.7152*g+.0722*b)/255,
+          k=1+psh*(1-M)*(1-M)*(1-Lp)-phi*M*M*Lp;                // dark pixels in a dark surrounding lift; bright in a bright one settle
+          r*=k;g*=k;b*=k;}
+        r=r<0?0:r>255?255:(r+.5)|0;g=g<0?0:g>255?255:(g+.5)|0;b=b<0?0:b>255?255:(b+.5)|0;
+      }
+      const fr=LF[r],fg=LF[g],fb=LF[b],c0=(LI[r]*N2+LI[g]*N+LI[b])*3,c3=c0+dR+dG+3;
       let c1,c2,w0,w1,w2,w3;
       if(fr>fg){if(fg>fb){c1=c0+dR;c2=c1+dG;w0=1-fr;w1=fr-fg;w2=fg-fb;w3=fb;}
         else if(fr>fb){c1=c0+dR;c2=c1+3;w0=1-fr;w1=fr-fb;w2=fb-fg;w3=fg;}
@@ -605,17 +619,43 @@ function applyLUT(d,w,h,y0,W,H,lut,fx,seed){
       if(VT){const k=VT[(((x-cx)*(x-cx)+dy2)*rr)|0];R*=k;G*=k;B*=k;}
       let nz;
       if(gr){let hs=(((x/blk)|0)*73856093)^(by*19349663)^s;hs=Math.imul(hs^(hs>>>15),2246822519);hs^=hs>>>13;
-        const l=(.2126*R+.7152*G+.0722*B)/255;nz=(((hs&1023)+((hs>>>10)&1023))/1023-1)*gr*(.35+2.6*l*(1-l));}   // grain strongest in midtones
-      else{s=(Math.imul(s,1664525)+1013904223)|0;nz=((s>>>16)&255)/255-.5;}                                    // dither to avoid banding
+        const l=(.2126*R+.7152*G+.0722*B)/255;nz=(((hs&1023)+((hs>>>10)&1023))/1023-1)*gr*(.35+2.6*l*(1-l));}
+      else{s=(Math.imul(s,1664525)+1013904223)|0;nz=((s>>>16)&255)/255-.5;}
       d[i]=R+nz;d[i+1]=G+nz;d[i+2]=B+nz;
     }
   }
+}
+/* ---------- auto white balance (grey world) + shadow/highlight recovery (local tone) ---------- */
+const lmC=document.createElement('canvas');lmC.width=48;lmC.height=64;const lmG=lmC.getContext('2d',{willReadFrequently:true});
+/* local average brightness on a 48×64 grid: the "surrounding" each pixel is compared against */
+function localMean(src,sw,sh){
+  const W=48,H=64;lmG.drawImage(src,0,0,sw,sh,0,0,W,H);
+  const d=lmG.getImageData(0,0,W,H).data,a=new Float32Array(W*H),t=new Float32Array(W*H);
+  for(let i=0,j=0;i<W*H;i++,j+=4)a[i]=(.2126*d[j]+.7152*d[j+1]+.0722*d[j+2])/255;
+  for(let p=0;p<2;p++){
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){let q=0;for(let k=-3;k<=3;k++)q+=a[y*W+Math.min(W-1,Math.max(0,x+k))];t[y*W+x]=q/7;}
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){let q=0;for(let k=-3;k<=3;k++)q+=t[Math.min(H-1,Math.max(0,y+k))*W+x];a[y*W+x]=q/7;}
+  }
+  return a;
+}
+/* pre-pass settings for one frame. stats: scene statistics (for grey world); src: canvas used for the local map */
+function makePre(stats,src,sw,sh){
+  const aw=awbK,sd=sdK;if(!aw&&!sd)return null;
+  const pre={gr:1,gg:1,gb:1,sh:0,hi:0,map:null,mw:48,mh:64};
+  if(aw&&stats){
+    const conf=1-ss(.03,.08,stats.mc);                       // grey world only holds when the scene is roughly neutral on average
+    const avg=(stats.lr+stats.lg+stats.lb)/3,k=aw*conf/2.2;  // /2.2: gain applied to encoded values
+    const g=c=>Math.max(.75,Math.min(1.33,Math.pow(avg/Math.max(c,1e-4),k)));
+    pre.gr=g(stats.lr);pre.gg=g(stats.lg);pre.gb=g(stats.lb);
+  }
+  if(sd&&src){pre.sh=sd*.6;pre.hi=sd*.5;pre.map=localMean(src,sw,sh);}
+  return pre;
 }
 
 function crop(vw,vh){const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
 
 /* ---------- current look ---------- */
-let fil='none',autoFil=false,recFil=null,lookK=1,matchK=.8;
+let fil='none',autoFil=false,recFil=null,lookK=1,matchK=.8,awbK=0,sdK=0;
 let refStats=null,refThumb=null,liveStats=null,matchLUT=null;
 const lutCache=new Map();
 function lookLUT(key){
@@ -624,7 +664,8 @@ function lookLUT(key){
   return l;
 }
 function rebuildMatch(){matchLUT=refStats&&liveStats?bake(makeMatch(liveStats,refStats,matchK)):null;}
-function currentLUT(){return fil==='none'?null:fil==='match'?matchLUT:lookLUT(fil);}
+let idL=null;function idLUT(){return idL||(idL=bake(makeLook({},0),true));}
+function currentLUT(){if(fil==='none')return awbK||sdK?idLUT():null;return fil==='match'?matchLUT:lookLUT(fil);}
 function currentFX(){const p=fil==='match'||fil==='none'?{}:FIL[fil];return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK};}
 const sc=document.createElement('canvas');sc.width=96;sc.height=96;const sg=sc.getContext('2d',{willReadFrequently:true});
 function statsOf(src,sx,sy,sw,sh){sg.drawImage(src,sx,sy,sw,sh,0,0,96,96);return labStats(sg.getImageData(0,0,96,96).data);}
@@ -653,6 +694,8 @@ $('matchK').oninput=e=>{
   if(fil==='match'){matchK=k;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildMatch);}else lookK=k;
 };
 
+$('awbK').oninput=e=>{awbK=e.target.value/100;$('awbOut').textContent=e.target.value;};
+$('sdK').oninput=e=>{sdK=e.target.value/100;$('sdOut').textContent=e.target.value;};
 /* measure the scene about once a second (in Oklab): feeds the recommendation and 追色 */
 function analyse(){
   if(!stream||!v.videoWidth||document.hidden)return;
@@ -689,8 +732,9 @@ function loop(){
     if(pc.width!==W){pc.width=W;pc.height=H;}
     pg.save();if(facing==='user'){pg.translate(W,0);pg.scale(-1,1);}
     pg.drawImage(v,sx,sy,sw,sh,0,0,W,H);pg.restore();
+    const pre=makePre(liveStats,pc,W,H);
     const t=performance.now(),img=pg.getImageData(0,0,W,H);
-    applyLUT(img.data,W,H,0,W,H,lut,currentFX(),++frame*7919);pg.putImageData(img,0,0);
+    applyLUT(img.data,W,H,0,W,H,lut,currentFX(),++frame*7919,pre);pg.putImageData(img,0,0);
     pms=pms*.9+(performance.now()-t)*.1;
     if(pms>24&&pi>0){pi--;pms=13;}else if(pms<7&&pi<2){pi++;pms=13;}
   }
@@ -712,12 +756,14 @@ function toCanvas(src,sx,sy,sw,sh,mirror){
 async function develop(c,srcStats){
   let lut=currentLUT();
   if(fil==='match'&&refStats&&srcStats)lut=bake(makeMatch(srcStats,refStats,matchK),true);
-  if(!lut)return c;
+  const pre=makePre(awbK?statsOf(c,0,0,c.width,c.height):null,c,c.width,c.height);
+  if(!lut&&!pre)return c;
+  if(!lut)lut=idLUT();
   const g=c.getContext('2d'),w=c.width,h=c.height,fx=currentFX(),seed=(Math.random()*1e9)|0,rows=Math.max(16,Math.floor(1048576/w));
   $('busy').hidden=false;await new Promise(r=>setTimeout(r,30));
   try{
     for(let y=0,n=0;y<h;y+=rows,n++){
-      const hh=Math.min(rows,h-y),img=g.getImageData(0,y,w,hh);applyLUT(img.data,w,hh,y,w,h,lut,fx,seed+y);g.putImageData(img,0,y);
+      const hh=Math.min(rows,h-y),img=g.getImageData(0,y,w,hh);applyLUT(img.data,w,hh,y,w,h,lut,fx,seed+y,pre);g.putImageData(img,0,y);
       if(n%4===3)await new Promise(r=>setTimeout(r));
     }
   }finally{$('busy').hidden=true;}
