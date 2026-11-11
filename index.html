@@ -39,6 +39,10 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 .lens button[aria-pressed="true"]{color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
 .lens button.suggest:not([aria-pressed="true"]){box-shadow:inset 0 0 0 1px rgba(233,201,138,.6)}
 .count{position:absolute;inset:0;display:grid;place-items:center;font-size:120px;font-weight:800;color:#fff;text-shadow:0 4px 30px rgba(0,0,0,.5);pointer-events:none}
+.focus{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border:1.5px solid var(--accent);border-radius:6px;pointer-events:none}
+.focus.go{animation:fz .35s ease-out}
+@keyframes fz{from{transform:scale(1.5);opacity:.4}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.focus.go{animation:none}}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
 .msg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;text-align:center;padding:24px;background:var(--bg);font-size:15px;line-height:1.6}
 .msg button{background:var(--accent);color:#1a1408;border:0;border-radius:12px;padding:12px 20px;font:700 16px var(--f)}
@@ -87,6 +91,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <canvas id="ov"></canvas>
   <div class="banner"><span id="banner"></span></div>
   <div class="lens" id="lens"></div>
+  <div class="focus" id="focus" hidden></div>
   <div class="count" id="count" hidden></div>
   <div class="flash" id="flash"></div>
   <div class="msg" id="msg">
@@ -94,7 +99,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <button id="startBtn">開啟相機</button>
   </div>
 </div>
-<div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小。</div>
+<div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
 <div class="fbar" id="fbar"></div>
 <input id="matchIn" type="file" accept="image/*" hidden>
 <div class="refbox" id="matchRow" hidden>
@@ -122,7 +127,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <button class="shutter" id="shutter" aria-label="拍照"><span></span></button>
   <div class="r" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
     <button class="ibtn" id="flipBtn">前／後鏡頭</button>
-    <label class="ibtn file">高畫質<input id="hqIn" type="file" accept="image/*" capture="environment"></label>
+    <label class="ibtn file" id="hqWrap" hidden>內建相機<input id="hqIn" type="file" accept="image/*" capture="environment"></label>
   </div>
 </div>
 
@@ -282,11 +287,32 @@ function rel(e){const r=vf.getBoundingClientRect();return{x:(e.clientX-r.left)/r
 function center(){const p=[...pts.values()];return p.reduce((a,q)=>({x:a.x+q.x/p.length,y:a.y+q.y/p.length}),{x:0,y:0});}
 function spread(){const p=[...pts.values()];return p.length>1?Math.hypot(p[0].x-p[1].x,(p[0].y-p[1].y)*4/3):0;}
 function snap(){start={c:center(),d:spread(),G:{...G}};}
-vf.addEventListener('pointerdown',e=>{if(e.target.closest('.lens,.msg'))return;vf.setPointerCapture(e.pointerId);pts.set(e.pointerId,rel(e));snap();});
+let tap=null;
+vf.addEventListener('pointerdown',e=>{if(e.target.closest('.lens,.msg'))return;vf.setPointerCapture(e.pointerId);pts.set(e.pointerId,rel(e));snap();
+  tap=pts.size===1?{p:rel(e),t:Date.now()}:null;});
 vf.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,rel(e));
   const c=center();let k=start.G.k;if(pts.size>1&&start.d>0)k=Math.max(.3,Math.min(3,start.G.k*spread()/start.d));
   G={k,dx:start.G.dx+c.x-start.c.x,dy:start.G.dy+c.y-start.c.y};draw();});
-function up(e){pts.delete(e.pointerId);if(pts.size)snap();}
+function up(e){
+  if(tap&&pts.size===1&&e.type==='pointerup'){const p=rel(e);
+    if(Math.hypot(p.x-tap.p.x,p.y-tap.p.y)<.015&&Date.now()-tap.t<350){G={...start.G};draw();focusAt(p);}}
+  tap=null;pts.delete(e.pointerId);if(pts.size)snap();}
+async function focusAt(p){
+  const ring=$('focus');ring.style.left=p.x*100+'%';ring.style.top=p.y*100+'%';ring.hidden=false;
+  ring.classList.remove('go');void ring.offsetWidth;ring.classList.add('go');
+  clearTimeout(focusAt.t);focusAt.t=setTimeout(()=>ring.hidden=true,1200);
+  if(!stream||!trCap)return;
+  const tr=stream.getVideoTracks()[0],adv={};
+  const px=facing==='user'?1-p.x:p.x;
+  if(trCap.pointsOfInterest!==undefined||'pointsOfInterest' in (tr.getSettings?tr.getSettings():{}))adv.pointsOfInterest=[{x:px,y:p.y}];
+  if(trCap.focusMode&&trCap.focusMode.includes('single-shot'))adv.focusMode='single-shot';
+  if(trCap.exposureMode&&trCap.exposureMode.includes('single-shot'))adv.exposureMode='single-shot';
+  if(!Object.keys(adv).length){adv.pointsOfInterest=[{x:px,y:p.y}];}
+  try{await tr.applyConstraints({advanced:[adv]});}catch(e){}
+  // go back to continuous after a few seconds so moving subjects stay sharp
+  clearTimeout(focusAt.c);focusAt.c=setTimeout(()=>{if(stream&&trCap.focusMode&&trCap.focusMode.includes('continuous'))
+    stream.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});},5000);
+}
 vf.addEventListener('pointerup',up);vf.addEventListener('pointercancel',up);
 vf.addEventListener('dblclick',()=>{G={dx:0,dy:0,k:1};draw();});
 
@@ -304,12 +330,24 @@ async function open(deviceId){
   if(cap.width&&cap.height&&cap.width.max){
     try{await tr.applyConstraints({width:{ideal:cap.width.max},height:{ideal:cap.height.max}});}catch(e){}
   }
+  trCap=cap;curZoom=null;
+  if(cap.focusMode&&cap.focusMode.includes('continuous')){try{await tr.applyConstraints({advanced:[{focusMode:'continuous'}]});}catch(e){}}
   v.srcObject=stream;await v.play().catch(()=>{});
   v.classList.toggle('mirror',facing==='user');
   imgCap=('ImageCapture' in window)?(()=>{try{return new ImageCapture(tr);}catch(e){return null;}})():null;
   setTimeout(showRes,600);
+  if(imgCap)prepPhoto();else $('hqWrap').hidden=false;
 }
-let imgCap=null;
+let imgCap=null,trCap={},curZoom=null,photoSet=null;
+async function prepPhoto(){
+  photoSet=null;if(!imgCap)return;
+  try{const pc=await imgCap.getPhotoCapabilities();
+    if(pc.imageWidth&&pc.imageWidth.max)photoSet={imageWidth:pc.imageWidth.max,imageHeight:pc.imageHeight.max};
+    if(pc.fillLightMode&&pc.fillLightMode.includes('off'))photoSet={...(photoSet||{}),fillLightMode:'off'};
+  }catch(e){}
+  // hide the hand-off button when the page itself can take full-quality photos
+  $('hqWrap').hidden=true;
+}
 function showRes(){
   if(!v.videoWidth)return;const [, , sw,sh]=crop(v.videoWidth,v.videoHeight);
   const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}`;
@@ -339,7 +377,8 @@ async function setLens(k,fromTpl){
   try{
     if(lensMap[k]){await open(lensMap[k].id);}
     else if(zoomCap){if(prev!=='1'&&lensMap[prev]&&lensMap['1'])await open(lensMap['1'].id);
-      await stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:Math.max(zoomCap.min,Math.min(zoomCap.max,parseFloat(k)))}]});}
+      curZoom=Math.max(zoomCap.min,Math.min(zoomCap.max,parseFloat(k)));
+      await stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:curZoom}]});}
     else if(k!=='1'){curLens=prev;if(fromTpl)hint(`這支手機的瀏覽器不能切 ${k==='0.5'?'.5':k}x，用前後走動調整大小。`);}
   }catch(e){curLens=prev;}
   lensButtons();
@@ -551,7 +590,8 @@ function grab(){
 async function grabPhoto(){
   if(!imgCap)return null;
   try{
-    const blob=await imgCap.takePhoto();const bmp=await createImageBitmap(blob);
+    const blob=await imgCap.takePhoto(photoSet||undefined);const bmp=await createImageBitmap(blob);
+    if(curZoom&&stream){stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:curZoom}]}).catch(()=>{});}
     const [sx,sy,sw,sh]=crop(bmp.width,bmp.height);
     const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d',{willReadFrequently:true});
     if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
