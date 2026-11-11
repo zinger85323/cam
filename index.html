@@ -33,10 +33,14 @@ body.lscape .vf{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;ma
 body.lscape .shoot{position:fixed;top:0;right:0;bottom:0;width:112px;margin:0;padding:12px 10px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;z-index:4}
 body.lscape .shoot .l,body.lscape .shoot .r{justify-self:auto}
 /* controls kept on the left, clear of the phone's side safe area: 分頁 at the top, 調色/格線/倒數 and 動作 at the bottom */
-body.lscape #tabs{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:5;margin:0;display:flex!important;gap:6px}
+/* 選項 folds the whole left column (分頁, 調色, 格線, 倒數, 動作) into one small button at the top left */
+body.lscape #lcBtn{display:block;position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:6;margin:0}
+body:not(.lscape) #lcBtn{display:none!important}
+body.lscape:not(.lcol) #tabs,body.lscape:not(.lcol) .top,body.lscape:not(.lcol) #stripBtn,body.lscape:not(.lcol) #strip,body.lscape:not(.lcol) #fbar,body.lscape:not(.lcol) #fixRow,body.lscape:not(.lcol) #matchRow{display:none!important}
+body.lscape #tabs{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(108px + env(safe-area-inset-left,0px));z-index:5;margin:0;display:flex!important;gap:6px}
 body.lscape #tabs button{padding:6px 10px;font-size:13px}
 body.lscape .top{display:flex;position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px;z-index:5;margin:0;padding:0;background:none;border:0}
-body.lscape .top>div:first-child,body.lscape #fillBtn{display:none!important}
+body.lscape .top>div:first-child{display:none!important}
 body.lscape #stripBtn{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:58px;z-index:5;margin:0}
 body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px calc(10px + env(safe-area-inset-left,0px)) 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
 body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
@@ -101,7 +105,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-8</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-11</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -132,6 +136,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <div class="row"><span>強度</span><input id="matchK" type="range" min="10" max="100" step="5" value="100"><output id="matchOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">100</output></div>
 </div>
 
+<button class="ibtn" id="lcBtn" aria-expanded="false">選項 ▸</button>
 <div class="tabs" id="tabs">
   <button data-c="people" aria-pressed="true">人像</button>
   <button data-c="food" aria-pressed="false">食物</button>
@@ -293,7 +298,9 @@ function poseFig(g,cx,top,h,name){
   g.restore();
 }
 function drawShapes(g,W,H,shapes,T,lw){
-  const X=x=>((x-.5)*T.k+.5+T.dx)*W, Y=y=>((y-.5)*T.k+.5+T.dy)*H, R=r=>r*T.k*W;
+  // guides are designed on a 3:4 frame: keep that shape (centred) so circles stay round and people stay upright
+  // when the viewfinder is wider (sideways) or taller than 3:4
+  const RW=Math.min(W,H*3/4), X=x=>W/2+((x-.5)*T.k+T.dx)*RW, Y=y=>((y-.5)*T.k+.5+T.dy)*H, R=r=>r*T.k*RW;
   g.save();g.lineCap='round';g.lineJoin='round';
   // pass 1: silhouettes
   shapes.filter(s=>s.k==='sil'||s.k==='pose').forEach(s=>s.k==='pose'?poseFig(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.name):sil(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.kind));
@@ -355,16 +362,25 @@ $('refOp').oninput=e=>{refOp=e.target.value/100;draw();};
 
 /* ---------- overlay ---------- */
 function sizeCanvas(){const r=vf.getBoundingClientRect(),d=devicePixelRatio||1;ov.width=Math.round(r.width*d);ov.height=Math.round(r.height*d);
-  wantR=(fill||land)&&r.height>0?r.width/r.height:3/4;}
+  wantR=rIdx?RATIOS[rIdx][1]:(r.height>0?r.width/r.height:3/4);}
 function draw(){
   const W=ov.width,H=ov.height,d=devicePixelRatio||1;oc.clearRect(0,0,W,H);
   if(cat==='ref'&&refImg){
     const iw=refImg.naturalWidth,ih=refImg.naturalHeight,s=Math.max(W/iw,H/ih)*G.k;
     const w=iw*s,h=ih*s;oc.save();oc.globalAlpha=refOp;oc.drawImage(refImg,(W-w)/2+G.dx*W,(H-h)/2+G.dy*H,w,h);oc.restore();
   }
-  if(showGrid)gridLines(oc,W,H,1*d);
-  if(cat!=='ref')drawShapes(oc,W,H,TPL[cat][cur].s,G,2.2*d);
+  // the photo frame: the whole viewfinder (填滿) or a centred box of the chosen ratio, dimmed outside
+  const b=frameBox(W,H),pcEl=document.getElementById('pc');
+  if(rIdx){oc.fillStyle='rgba(0,0,0,.5)';oc.fillRect(0,0,W,b.y);oc.fillRect(0,b.y+b.h,W,H-b.y-b.h);oc.fillRect(0,b.y,b.x,b.h);oc.fillRect(b.x+b.w,b.y,W-b.x-b.w,b.h);}
+  oc.save();oc.translate(b.x,b.y);
+  if(showGrid)gridLines(oc,b.w,b.h,1*d);
+  if(cat!=='ref')drawShapes(oc,b.w,b.h,TPL[cat][cur].s,G,2.2*d);
+  oc.restore();
+  // the live preview is drawn into that same box
+  pcEl.style.left=rIdx?b.x/W*100+'%':'';pcEl.style.top=rIdx?b.y/H*100+'%':'';
+  pcEl.style.width=rIdx?b.w/W*100+'%':'';pcEl.style.height=rIdx?b.h/H*100+'%':'';
 }
+function frameBox(W,H){if(!rIdx)return{x:0,y:0,w:W,h:H};const R=RATIOS[rIdx][1];let w=W,h=W/R;if(h>H){h=H;w=H*R;}return{x:(W-w)/2,y:(H-h)/2,w,h};}
 
 /* ---------- drag + pinch (moves the whole guide, or the reference photo) ---------- */
 const pts=new Map();let start=null;
@@ -482,11 +498,15 @@ $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment
   try{await open(facing==='environment'&&lensMap['1']?lensMap['1'].id:undefined);}catch(e){}lensButtons();};
 $('colorBtn').onclick=()=>{const on=document.body.classList.toggle('cp');$('colorBtn').setAttribute('aria-pressed',on);};
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
+// the landscape left column folds away into 選項; tapping again shows it
+let lcol=false;
+$('lcBtn').onclick=()=>{lcol=!lcol;document.body.classList.toggle('lcol',lcol);
+  $('lcBtn').textContent=lcol?'收起 ◂':'選項 ▸';$('lcBtn').setAttribute('aria-expanded',lcol);};
 // turning the phone sideways switches to the landscape layout automatically (no button)
 function orient(){land=innerWidth>innerHeight;document.body.classList.toggle('lscape',land);pc.width=0;sizeCanvas();draw();}
 addEventListener('resize',orient);
-$('fillBtn').onclick=()=>{fill=!fill;document.body.classList.toggle('fill',fill);
-  $('fillBtn').setAttribute('aria-pressed',fill);$('fillBtn').textContent=fill?'填滿':'3:4';pc.width=0;sizeCanvas();draw();};
+$('fillBtn').onclick=()=>{rIdx=(rIdx+1)%RATIOS.length;
+  $('fillBtn').setAttribute('aria-pressed',rIdx>0);$('fillBtn').textContent=RATIOS[rIdx][0];pc.width=0;sizeCanvas();draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
 /* ---------- colour engine ----------
@@ -741,7 +761,8 @@ function makePre(stats,src,sw,sh){
 }
 
 let land=innerWidth>innerHeight;   // sideways phone = landscape layout; otherwise 直拍 fills the space (填滿) or stays 3:4
-let fill=true,wantR=3/4;   // wantR = width/height of the frame the viewer sees; crop, preview and photo all use it
+const RATIOS=[['填滿',0],['1:1',1],['3:4',.75],['4:3',4/3],['16:9',16/9]];   // 比例 button cycles through these (index 0 = fill the space)
+let rIdx=0,wantR=3/4;   // wantR = width/height of the frame the viewer sees; crop, preview and photo all use it
 document.body.classList.add('fill');
 document.body.classList.toggle('lscape',land);
 function crop(vw,vh){const want=wantR;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
