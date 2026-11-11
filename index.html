@@ -123,7 +123,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-26</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-27</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px;flex:1;justify-content:space-between">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -152,7 +152,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="expoRow" hidden><span style="min-width:3em">曝光</span><input id="expoIn" type="range"><output id="expoOut">0.0</output></div>
     <div class="row" id="wbRow" hidden><span style="min-width:3em">白平衡</span><button class="ibtn" id="wbAuto" aria-pressed="true">自動</button><input id="wbIn" type="range"><output id="wbOut">5000</output></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
-    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.11-26</output></div>
+    <div class="row" id="dbgRow"><span style="min-width:3em">畫面</span><output id="dbgOut">–</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.11-27</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
@@ -196,6 +197,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div id="review" hidden>
   <img id="rImg" alt="剛拍的照片">
   <p id="rTip">按「存到相簿」後選「儲存影像」。也可以長按照片儲存。</p>
+  <p id="rDbg" style="font-size:11px;color:var(--muted);margin:0;text-align:center"></p>
   <div class="row">
     <button id="retake">再拍一張</button>
     <button class="save" id="saveBtn">存到相簿</button>
@@ -444,10 +446,10 @@ vf.addEventListener('pointerup',up);vf.addEventListener('pointercancel',up);
 vf.addEventListener('dblclick',()=>{G={dx:0,dy:0,k:1};draw();});
 
 /* ---------- camera ---------- */
-let stream=null,facing='environment',lensMap={},curLens='1',zoomCap=null,suggest='1';
+let stream=null,facing='environment',lensMap={},curLens='1',zoomCap=null,suggest='1',lastDev;
 function stop(){stream&&stream.getTracks().forEach(t=>t.stop());stream=null;}
 async function open(deviceId){
-  stop();
+  stop();lastDev=deviceId;
   // ask in sensor orientation (landscape numbers); phones rotate it to portrait themselves
   const vc={width:{ideal:4032},height:{ideal:3024}};
   if(deviceId)vc.deviceId={exact:deviceId};else vc.facingMode=facing;
@@ -542,7 +544,15 @@ function fitVF(){
   const bcs=getComputedStyle(document.body),pad=(parseFloat(bcs.paddingTop)||0)+(parseFloat(bcs.paddingBottom)||0);
   vf.style.height=Math.max(200,innerHeight-pad-used)+'px';
 }
-function orient(){land=innerWidth>innerHeight;document.body.classList.toggle('lscape',land);pc.width=0;fitVF();sizeCanvas();draw();}
+let reT=null;
+function orient(){const was=document.body.classList.contains('lscape');
+  land=innerWidth>innerHeight;document.body.classList.toggle('lscape',land);pc.width=0;fitVF();sizeCanvas();draw();
+  // iPhone can keep sending frames in the old orientation after the phone turns; restarting the camera fixes that
+  if(was!==land){clearTimeout(reT);if(stream)reT=setTimeout(reopen,350);}}
+async function reopen(){if(!stream)return;const z=curLens;
+  try{await open(lastDev);
+    if(z!=='1'&&!lensMap[z]&&zoomCap){curZoom=Math.max(zoomCap.min,Math.min(zoomCap.max,parseFloat(z)));
+      await stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:curZoom}]});}}catch(e){}}
 addEventListener('resize',orient);
 $('fillBtn').onclick=()=>{rIdx=(rIdx+1)%RATIOS.length;
   $('fillBtn').setAttribute('aria-pressed',rIdx>0);$('fillBtn').textContent=RATIOS[rIdx][0];pc.width=0;sizeCanvas();draw();};
@@ -576,7 +586,7 @@ async function applyCam(){
   if(c.iso){adv.exposureMode=camSet.isoAuto?'continuous':'manual';if(!camSet.isoAuto)adv.iso=camSet.iso;}
   if(Object.keys(adv).length){try{await tr.applyConstraints({advanced:[adv]});}catch(e){}}
 }
-$('setBtn').onclick=()=>{const el=$('camSet');el.hidden=!el.hidden;$('setBtn').setAttribute('aria-pressed',!el.hidden);};
+$('setBtn').onclick=()=>{const el=$('camSet');el.hidden=!el.hidden;$('dbgOut').textContent=diag();$('setBtn').setAttribute('aria-pressed',!el.hidden);};
 $('flashBtn').onclick=()=>{camSet.flash=!camSet.flash;camRows();applyCam();};
 $('expoIn').oninput=e=>{camSet.expo=+e.target.value;$('expoOut').textContent=camSet.expo.toFixed(1);applyCam();};
 $('wbAuto').onclick=()=>{camSet.wbAuto=!camSet.wbAuto;camRows();applyCam();};
@@ -845,10 +855,19 @@ document.body.classList.toggle('lscape',land);
 /* sideways phone: the camera frame is portrait but the screen is landscape, so the picture is turned upright
    (phone turned with its right side up = picture turned 90° counter-clockwise) */
 function rotL(){return land&&v.videoWidth>0&&v.videoWidth<v.videoHeight;}
-// draws the region of the source being viewed into a W×H canvas (src: the live video, or a still photo)
-function drawView(g,W,H,sx,sy,sw,sh,src=v){g.drawImage(src,sx,sy,sw,sh,0,0,W,H);}
-// sideways phone (upright portrait frames in a landscape view): a landscape band of the frame, upright like the viewfinder
-function cropRot(vw,vh){const A=Math.max(wantR,1/wantR);let sw=vw,sh=vw/A;if(sh>vh){sh=vh;sw=vh*A;}return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
+// screen turn in degrees (0, 90, 180, 270); 90 = phone turned counter-clockwise (top to the left)
+function scrAngle(){const o=screen.orientation,a=o&&typeof o.angle==='number'?o.angle:(+window.orientation||0);return((a%360)+360)%360;}
+// draws the region of the source being viewed into a W×H canvas (src: the live video, or a still photo).
+// Sideways phone (portrait frames while the screen is landscape): the frames are sensor-oriented, so turn them
+// against the way the phone was turned, which puts the scene's top back at the top.
+function drawView(g,W,H,sx,sy,sw,sh,src=v,vw=src.videoWidth||src.width,vh=src.videoHeight||src.height){
+  if(!rotL()){g.drawImage(src,sx,sy,sw,sh,0,0,W,H);return;}
+  const s=W/sw;
+  if(scrAngle()===90)g.setTransform(0,-s,s,0,-s*sx,s*(vw-sy));else g.setTransform(0,s,-s,0,s*(vh-sx),-s*sy);
+  g.drawImage(src,0,0,vw,vh);g.setTransform(1,0,0,1,0,0);
+}
+function diag(){const a=screen.orientation&&typeof screen.orientation.angle==='number'?screen.orientation.angle:window.orientation;
+  return `${v.videoWidth}×${v.videoHeight}・${land?'橫':'直'} ${a===undefined?'?':a}°${rotL()?'・轉':''}`;}
 function crop(vw,vh){const want=wantR;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
 
 /* ---------- current look ---------- */
@@ -945,7 +964,7 @@ function loop(){
   const lut=stream&&v.videoWidth?currentLUT():null;
   if(pc.hidden!==!lut)pc.hidden=!lut;
   if(lut){
-    const rot=rotL(),[sx,sy,sw,sh]=rot?cropRot(v.videoWidth,v.videoHeight):crop(v.videoWidth,v.videoHeight),W=PW[pi],H=Math.round(W*sh/sw);
+    const rot=rotL(),[sx,sy,sw,sh]=rot?crop(v.videoHeight,v.videoWidth):crop(v.videoWidth,v.videoHeight),W=PW[pi],H=Math.round(W*sh/sw);
     if(pc.width!==W||pc.height!==H){pc.width=W;pc.height=H;}
     pg.save();if(facing==='user'&&!rot){pg.translate(W,0);pg.scale(-1,1);}
     drawView(pg,W,H,sx,sy,sw,sh);pg.restore();
@@ -989,7 +1008,7 @@ async function develop(c,srcStats){
 function grab(){
   const vw=v.videoWidth,vh=v.videoHeight;if(!vw)return null;
   if(rotL()){
-    const [sx,sy,sw,sh]=cropRot(vw,vh),k=Math.min(1,MAXEDGE/Math.max(sw,sh)),c=document.createElement('canvas');
+    const [sx,sy,sw,sh]=crop(vh,vw),k=Math.min(1,MAXEDGE/Math.max(sw,sh)),c=document.createElement('canvas');
     c.width=Math.round(sw*k);c.height=Math.round(sh*k);
     const g=c.getContext('2d',{willReadFrequently:true});g.imageSmoothingQuality='high';drawView(g,c.width,c.height,sx,sy,sw,sh);return c;
   }
@@ -1002,7 +1021,7 @@ async function grabPhoto(){
     const blob=await imgCap.takePhoto(photoSet||undefined);const bmp=await createImageBitmap(blob);
     if(curZoom&&stream){stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:curZoom}]}).catch(()=>{});}
     if(rotL()){   // sideways phone: the still is sensor-oriented, so turn it the same way as the viewfinder
-      const [rx,ry,rw,rh]=cropRot(bmp.width,bmp.height),k=Math.min(1,MAXEDGE/Math.max(rw,rh)),c=document.createElement('canvas');
+      const [rx,ry,rw,rh]=crop(bmp.height,bmp.width),k=Math.min(1,MAXEDGE/Math.max(rw,rh)),c=document.createElement('canvas');
       c.width=Math.round(rw*k);c.height=Math.round(rh*k);
       drawView(c.getContext('2d'),c.width,c.height,rx,ry,rw,rh,bmp);return c;
     }
@@ -1010,6 +1029,7 @@ async function grabPhoto(){
   }catch(e){imgCap=null;showRes();return null;}
 }
 function finish(c){
+  $('rDbg').textContent=`v2026.11.11-27・照片 ${c.width}×${c.height}・相機 ${diag()}`;
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
