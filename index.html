@@ -74,7 +74,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <b>照著框拍</b>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍</b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
     <button class="ibtn" id="timerBtn" aria-pressed="false">倒數 3 秒</button>
@@ -96,6 +96,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小。</div>
 <div class="fbar" id="fbar"></div>
+<input id="matchIn" type="file" accept="image/*" hidden>
+<div class="refbox" id="matchRow" hidden>
+  <div class="row"><span>追色強度</span><input id="matchK" type="range" min="20" max="100" value="80"><output id="matchOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">80</output></div>
+</div>
 
 <div class="tabs" id="tabs">
   <button data-c="people" aria-pressed="true">人像</button>
@@ -116,7 +120,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <img class="thumb l" id="thumb" alt="" hidden>
   <span class="l" id="thumbPh"></span>
   <button class="shutter" id="shutter" aria-label="拍照"><span></span></button>
-  <button class="ibtn r" id="flipBtn">前／後鏡頭</button>
+  <div class="r" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+    <button class="ibtn" id="flipBtn">前／後鏡頭</button>
+    <label class="ibtn file">高畫質<input id="hqIn" type="file" accept="image/*" capture="environment"></label>
+  </div>
 </div>
 
 <div id="review" hidden>
@@ -288,12 +295,24 @@ let stream=null,facing='environment',lensMap={},curLens='1',zoomCap=null,suggest
 function stop(){stream&&stream.getTracks().forEach(t=>t.stop());stream=null;}
 async function open(deviceId){
   stop();
-  const vc={width:{ideal:3024},height:{ideal:4032},aspectRatio:{ideal:3/4}};
+  // ask in sensor orientation (landscape numbers); phones rotate it to portrait themselves
+  const vc={width:{ideal:4032},height:{ideal:3024}};
   if(deviceId)vc.deviceId={exact:deviceId};else vc.facingMode=facing;
   stream=await navigator.mediaDevices.getUserMedia({video:vc,audio:false});
+  const tr=stream.getVideoTracks()[0];const cap=tr.getCapabilities?tr.getCapabilities():{};zoomCap=cap.zoom||null;
+  // then push to the largest size this camera says it can do
+  if(cap.width&&cap.height&&cap.width.max){
+    try{await tr.applyConstraints({width:{ideal:cap.width.max},height:{ideal:cap.height.max}});}catch(e){}
+  }
   v.srcObject=stream;await v.play().catch(()=>{});
   v.classList.toggle('mirror',facing==='user');
-  const tr=stream.getVideoTracks()[0];const cap=tr.getCapabilities?tr.getCapabilities():{};zoomCap=cap.zoom||null;
+  imgCap=('ImageCapture' in window)?(()=>{try{return new ImageCapture(tr);}catch(e){return null;}})():null;
+  setTimeout(showRes,600);
+}
+let imgCap=null;
+function showRes(){
+  if(!v.videoWidth)return;const [, , sw,sh]=crop(v.videoWidth,v.videoHeight);
+  const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}`;
 }
 async function mapLenses(){
   let cams=[];try{cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');}catch(e){}
@@ -338,39 +357,109 @@ $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
-/* ---------- color filters ----------
-   b brightness, c contrast, s saturation, w warmth (+R −B), t tint (−G), f fade (lifted blacks), g gamma */
+/* ---------- color looks (film emulation) ----------
+   curve: master tone curve points [in,out] 0..1 (lift the first point to fade blacks, drop the last to soften highlights)
+   r/g/b: per-channel curves after the master curve · sat: saturation · sh/hi: split-tone colour added to shadows/highlights
+   grain: film grain strength · vig: vignette strength · bw: black and white */
 const FIL={
   none:{n:'原色',sw:'#9a9a9a'},
-  vivid:{n:'自然鮮明',sw:'#E7A34B',b:.02,c:1.06,s:1.15},
-  milk:{n:'日系奶白',sw:'#F1E6D8',b:.07,c:.9,s:.82,w:.02,f:.07},
-  latte:{n:'奶茶暖調',sw:'#C8A07A',b:.02,c:.95,s:.9,w:.07,f:.05},
-  tasty:{n:'美味暖色',sw:'#E07A3C',b:.03,c:1.08,s:1.2,w:.05},
-  clear:{n:'清透藍',sw:'#7FB2DE',b:.04,c:1.02,s:1.05,w:-.06,f:.02},
-  forest:{n:'森林綠',sw:'#6E9070',c:1.05,s:.92,w:.02,t:-.02,f:.05},
-  film:{n:'電影灰調',sw:'#8C8A84',c:1.1,s:.7,w:.03,f:.08},
-  night:{n:'夜晚提亮',sw:'#3F4A78',b:.08,g:.82,c:1.05,s:1.1,w:.03},
-  mono:{n:'黑白',sw:'#222',c:1.15,s:0},
+  /* camera-maker inspired looks: rk = red saturation, gk = green saturation, bc = shift blues toward cyan */
+  cchrome:{n:'經典正片',sw:'#7C8A8F',curve:[[0,.03],[.2,.15],[.5,.5],[.8,.85],[1,.96]],sat:.78,rk:.75,bc:.25,sh:[0,.01,.03],hi:[.02,.015,0],grain:.02,vig:.08},
+  cneg:{n:'經典負片',sw:'#6F8C86',curve:[[0,.05],[.25,.2],[.5,.5],[.75,.8],[1,.93]],g:[[0,0],[.5,.52],[1,.98]],sat:.75,rk:.85,bc:.2,sh:[-.02,.02,.04],hi:[.04,.01,-.01],grain:.03,vig:.12},
+  velvia:{n:'鮮豔風景',sw:'#2E8B57',curve:[[0,0],[.25,.19],[.5,.51],[.75,.83],[1,1]],sat:1.35,gk:1.1,bc:.1,vig:.15},
+  hassel:{n:'自然膚色',sw:'#D8B8A0',curve:[[0,.02],[.25,.25],[.5,.52],[.75,.78],[1,.97]],r:[[0,0],[.5,.51],[1,1]],sat:.97,hi:[.01,.005,-.005],vig:.05},
+  leica:{n:'德味濃郁',sw:'#8B2E2E',curve:[[0,0],[.2,.13],[.5,.48],[.8,.86],[1,.98]],sat:1.08,rk:1.15,gk:.9,sh:[0,0,.01],hi:[.02,.01,-.01],grain:.015,vig:.28},
+  gpos:{n:'街拍正片',sw:'#C8913A',curve:[[0,0],[.25,.17],[.5,.5],[.75,.85],[1,1]],sat:1.2,sh:[-.01,.01,.04],hi:[.04,.025,-.03],grain:.02,vig:.15},
+  gneg:{n:'街拍負片',sw:'#8FA8A0',curve:[[0,.08],[.3,.3],[.6,.6],[1,.9]],g:[[0,.01],[.5,.52],[1,.98]],sat:.7,sh:[-.01,.03,.03],hi:[.02,.02,0],grain:.03,vig:.1},
+  portra:{n:'人像膠片',sw:'#D9A98A',curve:[[0,.05],[.25,.25],[.5,.53],[.75,.8],[1,.96]],r:[[0,.01],[.5,.52],[1,1]],b:[[0,.02],[.5,.48],[1,.94]],sat:.9,sh:[0,.01,.02],hi:[.03,.015,-.02],grain:.025,vig:.12},
+  greenneg:{n:'綠調負片',sw:'#7E9A7A',curve:[[0,.06],[.3,.28],[.6,.62],[1,.95]],r:[[0,0],[.5,.48],[1,.97]],g:[[0,.03],[.5,.52],[1,.97]],sat:.85,sh:[-.01,.03,.02],hi:[.02,.02,-.01],grain:.03,vig:.15},
+  golden:{n:'金黃日落',sw:'#E2A44A',curve:[[0,.03],[.25,.24],[.5,.54],[.75,.82],[1,.98]],r:[[0,.02],[.5,.56],[1,1]],g:[[0,0],[.5,.51],[1,.97]],b:[[0,0],[.5,.42],[1,.85]],sat:1.1,hi:[.03,.01,-.03],grain:.02,vig:.2},
+  slide:{n:'高反差正片',sw:'#2F6FB0',curve:[[0,0],[.25,.18],[.5,.5],[.75,.84],[1,1]],b:[[0,.02],[.5,.5],[1,1]],sat:1.3,sh:[0,0,.03],grain:.015,vig:.22},
+  polaroid:{n:'復古拍立得',sw:'#C9B79A',curve:[[0,.12],[.4,.42],[.75,.78],[1,.9]],r:[[0,.04],[1,1]],g:[[0,.02],[1,.97]],b:[[0,.06],[1,.86]],sat:.78,sh:[0,.02,.04],hi:[.04,.03,-.02],grain:.03,vig:.25},
+  vivid:{n:'自然鮮明',sw:'#E7A34B',curve:[[0,0],[.25,.22],[.5,.52],[.75,.8],[1,1]],sat:1.15,vig:.1},
+  milk:{n:'日系奶白',sw:'#F1E6D8',curve:[[0,.08],[.3,.38],[.6,.7],[1,.97]],sat:.8,sh:[0,.01,.02],hi:[.01,.01,-.01],grain:.015},
+  latte:{n:'奶茶暖調',sw:'#C8A07A',curve:[[0,.06],[.5,.53],[1,.96]],r:[[0,.02],[1,1]],b:[[0,0],[1,.92]],sat:.88,sh:[.02,.01,0],grain:.02,vig:.1},
+  tasty:{n:'美味暖色',sw:'#E07A3C',curve:[[0,0],[.25,.21],[.5,.53],[.75,.82],[1,1]],r:[[0,0],[.5,.53],[1,1]],b:[[0,0],[.5,.47],[1,.95]],sat:1.22,vig:.12},
+  clear:{n:'清透藍',sw:'#7FB2DE',curve:[[0,.03],[.5,.55],[1,1]],r:[[0,0],[.5,.48],[1,.97]],b:[[0,.02],[.5,.53],[1,1]],sat:1.05},
+  forest:{n:'森林綠',sw:'#6E9070',curve:[[0,.05],[.25,.24],[.6,.62],[1,.95]],g:[[0,.02],[.5,.52],[1,.98]],r:[[0,0],[.5,.49],[1,.98]],sat:.9,sh:[0,.02,.03],hi:[.03,.02,-.01],grain:.02,vig:.12},
+  film:{n:'電影灰調',sw:'#8C8A84',curve:[[0,.07],[.25,.22],[.5,.5],[.75,.79],[1,.93]],sat:.72,sh:[-.01,.02,.04],hi:[.04,.02,-.02],grain:.025,vig:.18},
+  night:{n:'夜晚提亮',sw:'#3F4A78',curve:[[0,.02],[.15,.25],[.5,.62],[1,1]],sat:1.08,sh:[0,0,.03],hi:[.03,.01,-.01]},
+  mono:{n:'黑白顆粒',sw:'#222',bw:1,curve:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
 };
 let fil='none',autoFil=false,recFil=null;
+/* monotone cubic curve through the points → 256-entry table */
+function curveTable(pts){
+  const t=new Float32Array(256);
+  if(!pts){for(let i=0;i<256;i++)t[i]=i/255;return t;}
+  const n=pts.length,x=pts.map(p=>p[0]),y=pts.map(p=>p[1]),d=[],m=[];
+  for(let i=0;i<n-1;i++)d.push((y[i+1]-y[i])/(x[i+1]-x[i]));
+  m[0]=d[0];m[n-1]=d[n-2];for(let i=1;i<n-1;i++)m[i]=d[i-1]*d[i]<=0?0:(d[i-1]+d[i])/2;
+  for(let i=0;i<n-1;i++){if(d[i]===0){m[i]=m[i+1]=0;continue;}const a=m[i]/d[i],b=m[i+1]/d[i],h=a*a+b*b;if(h>9){const k=3/Math.sqrt(h);m[i]=k*a*d[i];m[i+1]=k*b*d[i];}}
+  for(let v=0;v<256;v++){const X=v/255;let i=0;while(i<n-2&&X>x[i+1])i++;
+    const h=x[i+1]-x[i],s=(X-x[i])/h,s2=s*s,s3=s2*s;
+    t[v]=Math.max(0,Math.min(1,(2*s3-3*s2+1)*y[i]+(s3-2*s2+s)*h*m[i]+(-2*s3+3*s2)*y[i+1]+(s3-s2)*h*m[i+1]));}
+  return t;
+}
 const lutCache={};
 function lut(key){
   if(lutCache[key])return lutCache[key];
-  const p=FIL[key],R=new Uint8ClampedArray(256),Gc=new Uint8ClampedArray(256),B=new Uint8ClampedArray(256);
-  const tone=(x,extra)=>{
-    if(p.g)x=Math.pow(x,p.g);
-    x=x+(p.b||0);x=(x-.5)*(p.c||1)+.5;x+=extra;const f=p.f||0;x=f+x*(1-f);
-    return Math.round(Math.max(0,Math.min(1,x))*255);};
-  for(let i=0;i<256;i++){const x=i/255;R[i]=tone(x,p.w||0);Gc[i]=tone(x,-(p.t||0));B[i]=tone(x,-(p.w||0));}
-  return lutCache[key]={R,G:Gc,B,s:p.s==null?1:p.s};
+  const p=FIL[key],M=curveTable(p.curve),C=[p.r,p.g,p.b].map(curveTable),out=[];
+  for(let c=0;c<3;c++){const a=new Float32Array(256);for(let i=0;i<256;i++)a[i]=C[c][Math.round(M[i]*255)]*255;out.push(a);}
+  return lutCache[key]={R:out[0],G:out[1],B:out[2],sat:p.sat==null?1:p.sat,sh:p.sh||[0,0,0],hi:p.hi||[0,0,0],grain:p.grain||0,vig:p.vig||0,bw:!!p.bw,rk:p.rk==null?1:p.rk,gk:p.gk==null?1:p.gk,bc:p.bc||0};
 }
-function applyFilter(g,w,h,key){
+/* ---------- 追色 (colour transfer): match mean and spread of Y, Cb, Cr to a reference photo ---------- */
+let refStats=null,refThumb=null,liveStats=null,matchK=.8;
+function statsFromData(d){
+  let n=0;const m=[0,0,0],q=[0,0,0];
+  for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];
+    const c=[.299*r+.587*g+.114*b,-.1687*r-.3313*g+.5*b,.5*r-.4187*g-.0813*b];
+    for(let j=0;j<3;j++){m[j]+=c[j];q[j]+=c[j]*c[j];}n++;}
+  return m.map((s,j)=>{const mu=s/n;return{mu,sd:Math.sqrt(Math.max(1,q[j]/n-mu*mu))};});
+}
+const sc=document.createElement('canvas');sc.width=64;sc.height=64;const sg=sc.getContext('2d',{willReadFrequently:true});
+function statsOf(src,w,h){sg.drawImage(src,0,0,w,h,0,0,64,64);return statsFromData(sg.getImageData(0,0,64,64).data);}
+function matchPixels(d,src){
+  if(!refStats||!src)return;
+  const k=matchK,A=[0,0,0],B=[0,0,0];
+  for(let j=0;j<3;j++){const ratio=Math.max(.5,Math.min(2,refStats[j].sd/src[j].sd));
+    // out = in*(1-k) + k*((in-μs)*ratio+μr)  →  out = in*A + B
+    A[j]=(1-k)+k*ratio;B[j]=k*(refStats[j].mu-src[j].mu*ratio);}
+  for(let i=0;i<d.length;i+=4){const r=d[i],g=d[i+1],b=d[i+2];
+    const Y=(.299*r+.587*g+.114*b)*A[0]+B[0],Cb=(-.1687*r-.3313*g+.5*b)*A[1]+B[1],Cr=(.5*r-.4187*g-.0813*b)*A[2]+B[2];
+    d[i]=Y+1.402*Cr;d[i+1]=Y-.34414*Cb-.71414*Cr;d[i+2]=Y+1.772*Cb;}
+}
+function applyFilter(g,w,h,key,srcStats){
   if(key==='none')return;
-  const L=lut(key),img=g.getImageData(0,0,w,h),d=img.data,s=L.s;
-  for(let i=0;i<d.length;i+=4){
-    let r=L.R[d[i]],gg=L.G[d[i+1]],b=L.B[d[i+2]];
-    if(s!==1){const l=.299*r+.587*gg+.114*b;r=l+(r-l)*s;gg=l+(gg-l)*s;b=l+(b-l)*s;}
-    d[i]=r;d[i+1]=gg;d[i+2]=b;
+  if(key==='match'){
+    const img=g.getImageData(0,0,w,h);
+    matchPixels(img.data,srcStats||statsOf(g.canvas,w,h));g.putImageData(img,0,0);return;
+  }
+  const L=lut(key),img=g.getImageData(0,0,w,h),d=img.data;
+  const sat=L.sat,sh=L.sh.map(v=>v*255),hi=L.hi.map(v=>v*255),gr=L.grain*255,vig=L.vig,bw=L.bw,rk=L.rk,gk=L.gk,bc=L.bc,hueOps=rk!==1||gk!==1||bc!==0;
+  const blk=Math.max(1,Math.round(w/900));   // grain clump size scales with resolution so it looks the same in preview and photo
+  const cx=w/2,cy=h/2,rr=1/(cx*cx+cy*cy);
+  let seed=(Math.random()*1e9)|0;
+  for(let y=0,i=0;y<h;y++){
+    const dy2=(y-cy)*(y-cy),by=(y/blk)|0;
+    for(let x=0;x<w;x++,i+=4){
+      let r=L.R[d[i]],gg=L.G[d[i+1]],b=L.B[d[i+2]];
+      let l=.299*r+.587*gg+.114*b;
+      if(bw){r=gg=b=l;}
+      else{
+        const t=l/255,ws=(1-t)*(1-t),wh=t*t;
+        r+=sh[0]*ws+hi[0]*wh;gg+=sh[1]*ws+hi[1]*wh;b+=sh[2]*ws+hi[2]*wh;
+        if(sat!==1){l=.299*r+.587*gg+.114*b;r=l+(r-l)*sat;gg=l+(gg-l)*sat;b=l+(b-l)*sat;}
+        if(hueOps){
+          const er=r-(gg>b?gg:b);if(er>0&&rk!==1)r=r-er+er*rk;          // reds: mute (<1) or deepen (>1)
+          const eg=gg-(r>b?r:b);if(eg>0&&gk!==1)gg=gg-eg+eg*gk;        // greens
+          const eb=b-(r>gg?r:gg);if(eb>0&&bc)gg+=eb*bc;                // blues lean cyan
+        }
+      }
+      if(vig){const k=1-vig*((x-cx)*(x-cx)+dy2)*rr;r*=k;gg*=k;b*=k;}
+      if(gr){let hsh=(((x/blk)|0)*73856093)^(by*19349663)^seed;hsh=Math.imul(hsh^(hsh>>>15),2246822519);hsh^=hsh>>>13;
+        const nz=((hsh&1023)/1023-.5)*gr*2*(1-Math.abs(l/255-.5));r+=nz;gg+=nz;b+=nz;}
+      d[i]=r;d[i+1]=gg;d[i+2]=b;
+    }
   }
   g.putImageData(img,0,0);
 }
@@ -381,6 +470,12 @@ function buildFbar(){
   const box=$('fbar');box.innerHTML='';
   const a=document.createElement('button');a.textContent='自動';a.setAttribute('aria-pressed',autoFil);
   a.onclick=()=>{autoFil=!autoFil;if(autoFil&&recFil)fil=recFil;buildFbar();};box.appendChild(a);
+  // 追色 chip: first tap picks a reference photo, later taps select it; tap again while selected to change photo
+  const m=document.createElement('button');m.setAttribute('aria-pressed',fil==='match');
+  m.innerHTML=refThumb?`<img src="${refThumb}" alt="" style="width:16px;height:16px;border-radius:4px;object-fit:cover;vertical-align:-3px;margin-right:6px">追色`:'＋ 追色';
+  m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;buildFbar();};
+  box.appendChild(m);
+  $('matchRow').hidden=fil!=='match';
   Object.entries(FIL).forEach(([k,p])=>{
     const b=document.createElement('button');b.innerHTML=`<span class="sw" style="background:${p.sw}"></span>${p.n}`;
     b.setAttribute('aria-pressed',fil===k&&!(autoFil&&k!==fil));if(k===recFil)b.classList.add('rec');
@@ -404,14 +499,29 @@ function analyse(){
   else if(warm<-.04){k='clear';why='畫面偏藍';}
   else if(cat==='food'&&warm>.04){k='tasty';why='食物偏暖色';}
   else if(L>.66&&S<.3){k='milk';why='畫面很亮、顏色淡';}
-  else if(warm>.08){k='latte';why='畫面偏暖';}
+  else if(warm>.14&&L>.4){k='golden';why='暖色光線，像夕陽';}
+  else if(warm>.08){k=cat==='people'?'portra':'latte';why='畫面偏暖';}
   else if(S<.14){k='film';why='顏色偏灰';}
+  else if(cat==='scene'&&S>.3){k='slide';why='顏色飽和、光線好';}
   else{k='vivid';why='光線正常';}
   if(k!==recFil){recFil=k;if(autoFil)fil=k;buildFbar();}
   $('hint').dataset.rec=`${why}，推薦「${FIL[k].n}」`;
   if(!hintT)$('hint').textContent=$('hint').dataset.rec;
 }
 setInterval(analyse,1000);
+
+$('matchIn').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{
+    const bmp=await createImageBitmap(f);
+    refStats=statsOf(bmp,bmp.width,bmp.height);
+    const t=document.createElement('canvas');t.width=t.height=48;
+    const s=Math.min(bmp.width,bmp.height);t.getContext('2d').drawImage(bmp,(bmp.width-s)/2,(bmp.height-s)/2,s,s,0,0,48,48);
+    refThumb=t.toDataURL('image/jpeg',.7);
+    fil='match';autoFil=false;buildFbar();hint('已套用參考照片的色調，再點一次「追色」可以換照片。');
+  }catch(err){hint('這張照片打不開，換一張試試。');}
+};
+$('matchK').oninput=e=>{matchK=e.target.value/100;$('matchOut').textContent=e.target.value;};
 
 /* live preview with the filter, drawn small for speed */
 const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true});
@@ -437,14 +547,37 @@ function grab(){
   g.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
   g.setTransform(1,0,0,1,0,0);applyFilter(g,c.width,c.height,fil);return c;
 }
+/* Native still photo (Android Chrome etc.): full sensor resolution, cropped to 3:4 */
+async function grabPhoto(){
+  if(!imgCap)return null;
+  try{
+    const blob=await imgCap.takePhoto();const bmp=await createImageBitmap(blob);
+    const [sx,sy,sw,sh]=crop(bmp.width,bmp.height);
+    const c=document.createElement('canvas');c.width=Math.round(sw);c.height=Math.round(sh);const g=c.getContext('2d',{willReadFrequently:true});
+    if(facing==='user'){g.translate(c.width,0);g.scale(-1,1);}
+    g.drawImage(bmp,sx,sy,sw,sh,0,0,c.width,c.height);g.setTransform(1,0,0,1,0,0);
+    applyFilter(g,c.width,c.height,fil);return c;
+  }catch(e){imgCap=null;showRes();return null;}
+}
+function finish(c){
+  c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
+    $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
+}
 async function shoot(){
   if(!stream)return;
   if(timer){const el=$('count');el.hidden=false;for(let i=3;i>0;i--){el.textContent=i;await new Promise(r=>setTimeout(r,1000));}el.hidden=true;}
-  const c=grab();if(!c)return;
   $('flash').style.opacity=.8;setTimeout(()=>$('flash').style.opacity=0,80);
-  c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
-    $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.95);
+  const c=(await grabPhoto())||grab();if(!c)return;finish(c);
 }
+/* 高畫質: hand off to the phone's own camera app (full HDR/night processing), then apply the chosen filter */
+$('hqIn').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{
+    const bmp=await createImageBitmap(f);
+    const c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;const g=c.getContext('2d',{willReadFrequently:true});
+    g.drawImage(bmp,0,0);applyFilter(g,c.width,c.height,fil);finish(c);
+  }catch(err){hint('這張照片打不開，請再拍一次。');}
+};
 function openReview(){$('rImg').src=lastURL;$('review').hidden=false;}
 $('shutter').onclick=shoot;$('thumb').onclick=openReview;$('retake').onclick=()=>{$('review').hidden=true;};
 $('saveBtn').onclick=async()=>{
