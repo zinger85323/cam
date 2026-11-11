@@ -35,7 +35,7 @@ body.cp .vf{max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(
 body.lscape{overflow:hidden}
 /* 設定 panel: shown over the bottom of the viewfinder; each row appears only if this phone's camera offers it */
 .camset{position:absolute;left:0;right:0;bottom:0;z-index:6;padding:10px 14px;background:rgba(0,0,0,.72);color:#fff;display:grid;gap:8px;font-size:13px}
-.camset .row{display:flex;align-items:center;gap:8px}
+.camset .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .camset .row[hidden]{display:none!important}
 .camset input[type=range]{flex:1;min-width:0}
 .camset output{min-width:4ch;text-align:right;font-variant-numeric:tabular-nums}
@@ -123,8 +123,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-23</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-26</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;gap:8px;flex:1;justify-content:space-between">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
     <button class="ibtn" id="fillBtn" aria-pressed="false">填滿</button>
@@ -152,6 +152,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="expoRow" hidden><span style="min-width:3em">曝光</span><input id="expoIn" type="range"><output id="expoOut">0.0</output></div>
     <div class="row" id="wbRow" hidden><span style="min-width:3em">白平衡</span><button class="ibtn" id="wbAuto" aria-pressed="true">自動</button><input id="wbIn" type="range"><output id="wbOut">5000</output></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.11-26</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
@@ -562,7 +563,7 @@ function camRows(){
     $('wbIn').value=camSet.wb;$('wbOut').textContent=camSet.wb;$('wbIn').disabled=camSet.wbAuto;}
   $('isoRow').hidden=!c.iso;
   const any=!!(c.torch||c.exposureCompensation||c.colorTemperature||c.iso);
-  $('setBtn').hidden=!any;if(!any)$('camSet').hidden=true;   // no 設定 button on phones that offer none of these
+  $('setBtn').hidden=false;   // 設定 always shows, so the version is reachable on every phone
   $('isoAuto').textContent=camSet.isoAuto?'自動':'手動';$('isoAuto').setAttribute('aria-pressed',camSet.isoAuto);
   if(c.iso){const i=c.iso;$('isoIn').min=i.min;$('isoIn').max=i.max;$('isoIn').step=i.step||10;
     $('isoIn').value=camSet.iso;$('isoOut').textContent=camSet.iso;$('isoIn').disabled=camSet.isoAuto;}
