@@ -174,6 +174,12 @@ const TPL={
     {k:'line',x1:0,y1:.667,x2:1,y2:.667},{k:'rect',x1:.635,y1:.55,x2:.70,y2:.8,round:1},{k:'text',x:.667,y:.84,t:'人'}]},
   {n:'消失點',lens:'1',say:'站在路中間，線條往她集中',s:[
     {k:'line',x1:.5,y1:.48,x2:.04,y2:1},{k:'line',x1:.5,y1:.48,x2:.96,y2:1},{k:'rect',x1:.45,y1:.5,x2:.55,y2:.74,round:0}]},
+  {n:'托腮',lens:'2',say:'手托下巴，眼睛看向鏡頭斜上方',s:[{k:'pose',name:'chin',x:.5,y1:.27,y2:.94},{k:'rect',x1:.35,y1:.27,x2:.65,y2:.94,round:1}]},
+  {n:'雙手插口袋',lens:'1',say:'雙手放口袋，肩膀放鬆，身體微側',s:[{k:'pose',name:'pocket',x:.5,y1:.3,y2:.92},{k:'rect',x1:.36,y1:.3,x2:.64,y2:.92,round:1}]},
+  {n:'張開雙臂',lens:'0.5',say:'雙臂打開，從腰部往上拍，會有氣勢',s:[{k:'pose',name:'open',x:.5,y1:.28,y2:.93},{k:'rect',x1:.2,y1:.28,x2:.8,y2:.93,round:1}]},
+  {n:'跳躍',lens:'1',say:'膝蓋收起、手往上揮，在最高點按快門',s:[{k:'pose',name:'jump',x:.5,y1:.12,y2:.94},{k:'rect',x1:.3,y1:.12,x2:.7,y2:.94,round:1}]},
+  {n:'蹲下抱膝',lens:'2',say:'蹲低，從斜上方往下拍',s:[{k:'pose',name:'crouch',x:.5,y1:.36,y2:.94},{k:'rect',x1:.3,y1:.36,x2:.7,y2:.94,round:1}]},
+  {n:'單腳倚靠',lens:'1',say:'一腳屈起、手扶腰，重心放在另一腳',s:[{k:'pose',name:'leg',x:.5,y1:.3,y2:.92},{k:'rect',x1:.34,y1:.3,x2:.66,y2:.92,round:1}]},
  ],
  food:[
   {n:'兩點',lens:'1',say:'主角一個圈，配角一個圈',s:[
@@ -227,11 +233,33 @@ function sil(g,cx,top,h,kind){
     rr(g,cx-u*.085,top+u*.15,u*.17,u*.38,u*.06);g.fill();rr(g,cx-u*.075,top+u*.5,u*.065,u*.5,u*.03);g.fill();rr(g,cx+u*.01,top+u*.5,u*.065,u*.5,u*.03);g.fill();}
   g.restore();
 }
+/* ---------- pose figures (joint positions in units of body height; x from centre, y from top) ---------- */
+const STAND={hd:[0,.065],nk:[0,.15],sl:[-.11,.19],sr:[.11,.19],el:[-.15,.35],er:[.15,.35],ha:[-.15,.5],hb:[.15,.5],
+  hl:[-.065,.52],hr:[.065,.52],kl:[-.06,.76],kr:[.06,.76],fl:[-.07,1],fr:[.08,1]};
+const POSES={
+  chin:{hd:[-.01,.065],er:[.17,.33],hb:[.07,.13]},                       // hand under the chin
+  pocket:{el:[-.15,.36],ha:[-.06,.5],er:[.15,.36],hb:[.06,.5]},          // hands in pockets
+  open:{el:[-.27,.2],ha:[-.42,.2],er:[.27,.2],hb:[.42,.2]},              // arms open
+  jump:{hd:[0,.0],nk:[0,.13],el:[-.17,.08],ha:[-.2,-.06],er:[.17,.08],hb:[.2,-.06],kl:[-.1,.74],fl:[-.2,.88],kr:[.1,.74],fr:[.2,.88]},
+  crouch:{hd:[0,.2],nk:[0,.28],sl:[-.11,.31],sr:[.11,.31],el:[-.14,.45],er:[.14,.45],ha:[-.12,.68],hb:[.12,.68],
+    hl:[-.07,.6],hr:[.07,.6],kl:[-.14,.72],fl:[-.08,.98],kr:[.14,.72],fr:[.08,.98]},
+  leg:{er:[.2,.33],hb:[.09,.48],kl:[-.05,.76],fl:[-.04,1],kr:[.13,.76],fr:[.07,.92]},   // one leg bent, hand on hip
+};
+function poseFig(g,cx,top,h,name){
+  const P=Object.assign({},STAND,POSES[name]||{}),X=p=>cx+p[0]*h,Y=p=>top+p[1]*h,lw=h*.075;
+  g.save();g.fillStyle=g.strokeStyle='rgba(255,255,255,.16)';g.lineCap='round';g.lineJoin='round';
+  const limb=(a,b,w)=>{g.lineWidth=w;g.beginPath();g.moveTo(X(P[a]),Y(P[a]));g.lineTo(X(P[b]),Y(P[b]));g.stroke();};
+  [['sl','el'],['el','ha'],['sr','er'],['er','hb'],['hl','kl'],['kl','fl'],['hr','kr'],['kr','fr']].forEach(([a,b])=>limb(a,b,lw));
+  g.beginPath();g.moveTo(X(P.sl),Y(P.sl));g.lineTo(X(P.sr),Y(P.sr));g.lineTo(X(P.hr),Y(P.hr));g.lineTo(X(P.hl),Y(P.hl));g.closePath();g.fill();
+  limb('nk','hd',lw*.9);
+  g.beginPath();g.ellipse(X(P.hd),Y(P.hd),h*.055,h*.065,0,0,7);g.fill();
+  g.restore();
+}
 function drawShapes(g,W,H,shapes,T,lw){
   const X=x=>((x-.5)*T.k+.5+T.dx)*W, Y=y=>((y-.5)*T.k+.5+T.dy)*H, R=r=>r*T.k*W;
   g.save();g.lineCap='round';g.lineJoin='round';
   // pass 1: silhouettes
-  shapes.filter(s=>s.k==='sil').forEach(s=>sil(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.kind));
+  shapes.filter(s=>s.k==='sil'||s.k==='pose').forEach(s=>s.k==='pose'?poseFig(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.name):sil(g,X(s.x),Y(s.y1),Y(s.y2)-Y(s.y1),s.kind));
   // pass 2: lines with a soft dark halo then white dashes
   for(const pass of [0,1]){
     g.strokeStyle=pass?'#fff':'rgba(0,0,0,.35)';g.fillStyle=g.strokeStyle;
