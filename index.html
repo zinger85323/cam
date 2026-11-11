@@ -21,8 +21,12 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 .top b{font-size:16px;letter-spacing:.06em}
 .ibtn{background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 12px;font:inherit;font-size:13px}
 .ibtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
-@supports not (height:100dvh){.vf{max-height:calc(100vh - 408px)}}
+.vf{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:3/4;max-height:calc(100dvh - 290px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));background:#000;overflow:hidden;touch-action:none}
+@supports not (height:100dvh){.vf{max-height:calc(100vh - 290px)}}
+body.cp .vf{max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+@supports not (height:100dvh){body.cp .vf{max-height:calc(100vh - 408px)}}
+/* color panel: hidden until 調色 is tapped */
+body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow{display:none!important}
 .fbar{display:flex;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
 .fbar::-webkit-scrollbar{display:none}
 .fbar button{flex:0 0 auto;position:relative;background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 13px;font:500 13px var(--f)}
@@ -80,6 +84,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 <div class="top">
   <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍</b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
+    <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
     <button class="ibtn" id="timerBtn" aria-pressed="false">倒數 3 秒</button>
   </div>
@@ -355,7 +360,7 @@ async function prepPhoto(){
 }
 function showRes(){
   if(!v.videoWidth)return;const [, , sw,sh]=crop(v.videoWidth,v.videoHeight);
-  const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}`;
+  const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}・${fil==='none'?'原色':fil==='match'?'追色':FIL[fil].n}`;
 }
 async function mapLenses(){
   let cams=[];try{cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');}catch(e){}
@@ -398,6 +403,7 @@ $('startBtn').onclick=async()=>{
 };
 $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment';curLens='1';
   try{await open(facing==='environment'&&lensMap['1']?lensMap['1'].id:undefined);}catch(e){}lensButtons();};
+$('colorBtn').onclick=()=>{const on=document.body.classList.toggle('cp');$('colorBtn').setAttribute('aria-pressed',on);};
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
@@ -685,7 +691,7 @@ function buildFbar(){
     b.setAttribute('aria-pressed',fil===k);if(k===recFil)b.classList.add('rec');
     b.onclick=()=>{fil=k;autoFil=false;buildFbar();};box.appendChild(b);
   });
-  $('matchRow').hidden=fil==='none';
+  $('matchRow').hidden=fil==='none';showRes();
   const kv=Math.round((fil==='match'?matchK:lookK)*100);$('matchK').value=kv;$('matchOut').textContent=kv;
 }
 let kT=0;
