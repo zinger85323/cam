@@ -16,8 +16,13 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;height:100dvh;background:var(--bg);color:var(--ink);font-family:var(--f);overscroll-behavior:none}
-body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);user-select:none;-webkit-user-select:none}
-.top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px));font-size:14px}
+/* the page is pinned to the visible screen so the shutter always sits at the very bottom (no blank strip under it) */
+body{position:fixed;inset:0;overflow-y:auto;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);user-select:none;-webkit-user-select:none}
+/* toolbar only: the app name and version line are hidden; the buttons stay on one row */
+.top{display:flex;justify-content:flex-end;align-items:center;gap:6px;padding:8px max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px));font-size:13px}
+.top>div:first-child{display:none}
+.top>div:last-child{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.top .ibtn{white-space:nowrap;border-radius:8px;padding:6px 10px;font-size:13px}
 .top b{font-size:16px;letter-spacing:.06em}
 .ibtn{background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 12px;font:inherit;font-size:13px}
 .ibtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
@@ -47,7 +52,6 @@ body.lscape:not(.lcol) #tabs,body.lscape:not(.lcol) .top,body.lscape:not(.lcol) 
 body.lscape #tabs{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(108px + env(safe-area-inset-left,0px));z-index:5;margin:0;display:flex!important;gap:6px}
 body.lscape #tabs button{padding:6px 10px;font-size:13px}
 body.lscape .top{display:flex;position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px;z-index:5;margin:0;padding:0;background:none;border:0}
-body.lscape .top>div:first-child{display:none!important}
 body.lscape #stripBtn{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:58px;z-index:5;margin:0}
 body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px calc(10px + env(safe-area-inset-left,0px)) 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
 body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
@@ -112,11 +116,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-12</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-13</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
-    <button class="ibtn" id="fillBtn" aria-pressed="true">填滿</button>
+    <button class="ibtn" id="fillBtn" aria-pressed="false">填滿</button>
     <button class="ibtn" id="timerBtn" aria-pressed="false">定時 關</button>
     <button class="ibtn" id="setBtn" aria-pressed="false">設定</button>
   </div>
