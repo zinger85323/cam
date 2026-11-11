@@ -25,6 +25,7 @@ body{display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)
 @supports not (height:100dvh){.vf{max-height:calc(100vh - 290px)}}
 body.cp .vf{max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
 @supports not (height:100dvh){body.cp .vf{max-height:calc(100vh - 408px)}}
+body.land .vf{aspect-ratio:4/3}
 /* color panel: hidden until 調色 is tapped */
 body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow{display:none!important}
 .fbar{display:flex;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
@@ -82,10 +83,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍</b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-5</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
+    <button class="ibtn" id="orientBtn" aria-pressed="false">橫拍</button>
     <button class="ibtn" id="timerBtn" aria-pressed="false">倒數 3 秒</button>
   </div>
 </div>
@@ -118,7 +120,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   <button data-c="scene" aria-pressed="false">風景建築</button>
   <button data-c="ref" aria-pressed="false">照片疊圖</button>
 </div>
-<div class="strip" id="strip"></div>
+<button class="ibtn" id="stripBtn" aria-expanded="false" hidden></button>
+<div class="strip" id="strip" hidden></div>
 <div class="refbox" id="refbox" hidden>
   <div class="row">
     <label class="ibtn file">選一張想模仿的照片<input id="refIn" type="file" accept="image/*"></label>
@@ -301,9 +304,18 @@ function gridLines(g,W,H,lw){
 }
 
 /* ---------- strip ---------- */
+// the template strip is folded away by default; the button shows the current template and opens it
+let stripOpen=false;
+function syncStrip(){
+  const b=$('stripBtn'),t=cat!=='ref'&&TPL[cat][cur];
+  $('strip').hidden=cat==='ref'||!stripOpen;
+  b.hidden=cat==='ref';
+  b.textContent=(t?t.n:'')+(stripOpen?' ▴':' ▾');b.setAttribute('aria-expanded',stripOpen);
+}
+$('stripBtn').onclick=()=>{stripOpen=!stripOpen;syncStrip();};
 function buildStrip(){
   const box=$('strip');box.innerHTML='';
-  $('refbox').hidden=cat!=='ref';box.hidden=cat==='ref';
+  $('refbox').hidden=cat!=='ref';syncStrip();
   if(cat==='ref'){$('banner').textContent=refImg?'把畫面跟疊上去的照片對齊':'先選一張想模仿的照片';draw();return;}
   TPL[cat].forEach((t,i)=>{
     const b=document.createElement('button');b.className='tpl';b.setAttribute('aria-pressed',i===cur);
@@ -314,7 +326,7 @@ function buildStrip(){
   });
 }
 function pick(i){
-  cur=i;G={dx:0,dy:0,k:1};const t=TPL[cat][i];
+  cur=i;G={dx:0,dy:0,k:1};const t=TPL[cat][i];syncStrip();
   [...$('strip').children].forEach((c,j)=>c.setAttribute('aria-pressed',j===i));
   $('banner').textContent=t.say;setLens(t.lens,true);draw();
 }
@@ -451,6 +463,8 @@ $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment
   try{await open(facing==='environment'&&lensMap['1']?lensMap['1'].id:undefined);}catch(e){}lensButtons();};
 $('colorBtn').onclick=()=>{const on=document.body.classList.toggle('cp');$('colorBtn').setAttribute('aria-pressed',on);};
 $('gridBtn').onclick=()=>{showGrid=!showGrid;$('gridBtn').setAttribute('aria-pressed',showGrid);draw();};
+$('orientBtn').onclick=()=>{land=!land;document.body.classList.toggle('land',land);
+  $('orientBtn').setAttribute('aria-pressed',land);pc.width=0;sizeCanvas();draw();};
 $('timerBtn').onclick=()=>{timer=!timer;$('timerBtn').setAttribute('aria-pressed',timer);};
 
 /* ---------- colour engine ----------
@@ -704,7 +718,8 @@ function makePre(stats,src,sw,sh){
   return pre;
 }
 
-function crop(vw,vh){const want=3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
+let land=false;   // 直拍 3:4 or 橫拍 4:3; crop, preview, guides and saved photo all follow it
+function crop(vw,vh){const want=land?4/3:3/4;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
 
 /* ---------- current look ---------- */
 let fil='none',autoFil=false,recFil=null,lookK=1,matchK=.8,awbK=0,sdK=0;
@@ -780,7 +795,7 @@ function loop(){
   const lut=stream&&v.videoWidth?currentLUT():null;
   if(pc.hidden!==!lut)pc.hidden=!lut;
   if(lut){
-    const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight),W=PW[pi],H=W*4/3;
+    const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight),W=PW[pi],H=land?W*3/4:W*4/3;
     if(pc.width!==W){pc.width=W;pc.height=H;}
     pg.save();if(facing==='user'){pg.translate(W,0);pg.scale(-1,1);}
     pg.drawImage(v,sx,sy,sw,sh,0,0,W,H);pg.restore();
