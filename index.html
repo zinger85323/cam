@@ -123,7 +123,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-17</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-18</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -846,8 +846,8 @@ document.body.classList.toggle('lscape',land);
 function rotL(){return land&&v.videoWidth>0&&v.videoWidth<v.videoHeight;}
 function drawView(g,W,H,sx,sy,sw,sh){   // draws the region of the video being viewed into a W×H canvas
   if(!rotL()){g.drawImage(v,sx,sy,sw,sh,0,0,W,H);return;}
-  const s=W/sw,vw=v.videoWidth;
-  g.setTransform(0,-s,s,0,-s*sx,s*(vw-sy));g.drawImage(v,0,0,v.videoWidth,v.videoHeight);g.setTransform(1,0,0,1,0,0);
+  const s=W/sw,vh=v.videoHeight;
+  g.setTransform(0,s,-s,0,s*(vh-sx),-s*sy);g.drawImage(v,0,0,v.videoWidth,v.videoHeight);g.setTransform(1,0,0,1,0,0);
 }
 function crop(vw,vh){const want=wantR;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;else sh=vw/want;return[(vw-sw)/2,(vh-sh)/2,sw,sh];}
 
