@@ -180,6 +180,12 @@ const TPL={
   {n:'跳躍',lens:'1',say:'膝蓋收起、手往上揮，在最高點按快門',s:[{k:'pose',name:'jump',x:.5,y1:.12,y2:.94},{k:'rect',x1:.3,y1:.12,x2:.7,y2:.94,round:1}]},
   {n:'蹲下抱膝',lens:'2',say:'蹲低，從斜上方往下拍',s:[{k:'pose',name:'crouch',x:.5,y1:.36,y2:.94},{k:'rect',x1:.3,y1:.36,x2:.7,y2:.94,round:1}]},
   {n:'單腳倚靠',lens:'1',say:'一腳屈起、手扶腰，重心放在另一腳',s:[{k:'pose',name:'leg',x:.5,y1:.3,y2:.92},{k:'rect',x1:.34,y1:.3,x2:.66,y2:.92,round:1}]},
+  {n:'坐台階',lens:'2',say:'坐在台階上，雙手放膝蓋，人稍微往前',s:[{k:'pose',name:'sitstep',x:.5,y1:.3,y2:.94},{k:'rect',x1:.33,y1:.3,x2:.67,y2:.94,round:1}]},
+  {n:'倚坐',lens:'2',say:'身體往後靠，腿伸直，從斜前方拍',s:[{k:'pose',name:'lean',x:.5,y1:.3,y2:.95},{k:'rect',x1:.3,y1:.3,x2:.7,y2:.95,round:1}]},
+  {n:'單膝跪地',lens:'1',say:'一膝著地，另一腳踩地，從高一點往下拍',s:[{k:'pose',name:'kneel',x:.5,y1:.3,y2:.95},{k:'rect',x1:.32,y1:.3,x2:.68,y2:.95,round:1}]},
+  {n:'側躺',lens:'1',say:'身體側躺在地上，手機放低到與人同高',s:[{k:'pose',name:'lying',x:.5,y1:.55,y2:.93},{k:'rect',x1:.08,y1:.55,x2:.92,y2:.93,round:1}]},
+  {n:'回頭走',lens:'1',say:'邊走邊回頭，腳步大一點，會有動感',s:[{k:'pose',name:'lookback',x:.5,y1:.3,y2:.94},{k:'rect',x1:.33,y1:.3,x2:.67,y2:.94,round:1}]},
+  {n:'拿咖啡',lens:'2',say:'一手拿杯子靠近胸口，看向旁邊',s:[{k:'pose',name:'coffee',x:.5,y1:.3,y2:.92},{k:'rect',x1:.34,y1:.3,x2:.66,y2:.92,round:1}]},
  ],
  food:[
   {n:'兩點',lens:'1',say:'主角一個圈，配角一個圈',s:[
@@ -244,6 +250,16 @@ const POSES={
   crouch:{hd:[0,.2],nk:[0,.28],sl:[-.11,.31],sr:[.11,.31],el:[-.14,.45],er:[.14,.45],ha:[-.12,.68],hb:[.12,.68],
     hl:[-.07,.6],hr:[.07,.6],kl:[-.14,.72],fl:[-.08,.98],kr:[.14,.72],fr:[.08,.98]},
   leg:{er:[.2,.33],hb:[.09,.48],kl:[-.05,.76],fl:[-.04,1],kr:[.13,.76],fr:[.07,.92]},   // one leg bent, hand on hip
+  sitstep:{hd:[0,.2],nk:[0,.28],sl:[-.11,.33],sr:[.11,.33],el:[-.18,.5],er:[.18,.5],ha:[-.12,.72],hb:[.12,.72],
+    hl:[-.07,.7],hr:[.07,.7],kl:[-.13,.8],kr:[.13,.8],fl:[-.14,.93],fr:[.14,.93]},   // sitting on steps, hands on knees
+  lean:{hd:[.05,.13],nk:[.03,.23],sl:[-.1,.28],sr:[.12,.28],el:[-.2,.46],er:[.22,.46],ha:[-.22,.66],hb:[.24,.66],
+    hl:[-.07,.7],hr:[.07,.7],kl:[-.1,.8],kr:[.1,.8],fl:[-.12,.97],fr:[.12,.97]},      // leaning back, legs stretched out
+  kneel:{hl:[-.065,.52],kl:[-.06,.76],fl:[-.07,1],hr:[.07,.52],kr:[.13,.96],fr:[.26,.98],er:[.2,.34],hb:[.18,.5]},  // one knee on the ground
+  lying:{hd:[-.95,.8],nk:[-.8,.84],sl:[-.65,.76],sr:[-.65,.9],el:[-.45,.98],er:[-.4,.96],ha:[-.25,.98],hb:[-.2,.95],
+    hl:[.25,.76],hr:[.25,.9],kl:[.55,.82],kr:[.55,.96],fl:[.85,.82],fr:[.85,.96]},  // lying on the side
+  lookback:{hd:[.05,.065],nk:[.03,.15],el:[-.2,.4],ha:[-.12,.5],er:[.2,.38],hb:[.12,.5],
+    kl:[-.12,.76],fl:[-.2,1],kr:[.12,.76],fr:[.2,.98]},                                  // walking, looking back over shoulder
+  coffee:{el:[-.15,.36],ha:[-.15,.5],er:[.16,.42],hb:[.02,.34]},                        // one hand raised to chest
 };
 function poseFig(g,cx,top,h,name){
   const P=Object.assign({},STAND,POSES[name]||{}),X=p=>cx+p[0]*h,Y=p=>top+p[1]*h,lw=h*.075;
