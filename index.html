@@ -425,7 +425,9 @@ function lensButtons(){
   });
 }
 async function setLens(k,fromTpl){
-  if(fromTpl)suggest=k;
+  // switching templates only suggests a lens (highlighted button); re-opening the camera on every
+  // template change is what made the page stutter, so the lens changes only when the viewer taps it
+  if(fromTpl){suggest=k;lensButtons();return;}
   if(!stream||facing==='user'){lensButtons();return;}
   const prev=curLens;curLens=k;
   try{
@@ -442,7 +444,7 @@ let hintT=null;function hint(s){$('hint').textContent=s;clearTimeout(hintT);hint
 $('startBtn').onclick=async()=>{
   if(!window.isSecureContext||!navigator.mediaDevices){$('msg').firstElementChild.innerHTML='這個網址不能開相機。<br>請用 https 開頭的網址打開。';return;}
   try{await open();await mapLenses();
-    $('msg').hidden=true;await setLens(suggest,true);
+    $('msg').hidden=true;await setLens(suggest);
   }catch(e){$('msg').firstElementChild.innerHTML='沒辦法開相機。<br>請到瀏覽器設定允許這個網站使用相機，再重新整理。';}
 };
 $('flipBtn').onclick=async()=>{facing=facing==='environment'?'user':'environment';curLens='1';
