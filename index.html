@@ -28,12 +28,20 @@ body.cp .vf{max-height:calc(100dvh - 408px - env(safe-area-inset-top,0px) - env(
 /* landscape (turning the phone sideways): the viewfinder fills the screen like the native camera;
    the shutter column sits at the right edge and the template picker folds into a small button */
 body.lscape{overflow:hidden}
-body.lscape .top,body.lscape .hint,body.lscape .fbar,body.lscape .banner,body.lscape #matchRow,body.lscape #fixRow,body.lscape #tabs,body.lscape #refbox{display:none!important}
+body.lscape .hint,body.lscape .banner,body.lscape #refbox{display:none!important}
 body.lscape .vf{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;aspect-ratio:auto;margin:0;z-index:1}
 body.lscape .shoot{position:fixed;top:0;right:0;bottom:0;width:112px;margin:0;padding:12px 10px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;z-index:4}
 body.lscape .shoot .l,body.lscape .shoot .r{justify-self:auto}
-body.lscape #stripBtn{position:fixed;left:12px;bottom:12px;z-index:4;margin:0}
-body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px 10px 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
+/* controls kept on the left, clear of the phone's side safe area: 分頁 at the top, 調色/格線/倒數 and 動作 at the bottom */
+body.lscape #tabs{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:5;margin:0;display:flex!important;gap:6px}
+body.lscape #tabs button{padding:6px 10px;font-size:13px}
+body.lscape .top{display:flex;position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px;z-index:5;margin:0;padding:0;background:none;border:0}
+body.lscape .top>div:first-child,body.lscape #fillBtn{display:none!important}
+body.lscape #stripBtn{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:58px;z-index:5;margin:0}
+body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px calc(10px + env(safe-area-inset-left,0px)) 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
+body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
+body.lscape.cp #fbar{top:calc(56px + env(safe-area-inset-top,0px))}
+body.lscape.cp #fixRow,body.lscape.cp #matchRow{bottom:104px}
 /* 填滿: the viewfinder takes the space the phone leaves; the photo is cropped to that same shape */
 body.fill:not(.lscape) .vf{aspect-ratio:auto;flex:1 1 auto;min-height:0;max-height:none}
 /* color panel: hidden until 調色 is tapped */
@@ -93,7 +101,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-7</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-8</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
