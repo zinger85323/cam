@@ -123,7 +123,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-29</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.11-30</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px;flex:1;justify-content:space-between">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -153,7 +153,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="wbRow" hidden><span style="min-width:3em">白平衡</span><button class="ibtn" id="wbAuto" aria-pressed="true">自動</button><input id="wbIn" type="range"><output id="wbOut">5000</output></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
     <div class="row" id="dbgRow"><span style="min-width:3em">畫面</span><output id="dbgOut">–</output></div>
-    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.11-29</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.11-30</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
@@ -390,7 +390,10 @@ $('refOp').oninput=e=>{refOp=e.target.value/100;draw();};
 
 /* ---------- overlay ---------- */
 function sizeCanvas(){const r=vf.getBoundingClientRect(),d=devicePixelRatio||1;ov.width=Math.round(r.width*d);ov.height=Math.round(r.height*d);
-  wantR=rIdx?RATIOS[rIdx][1]:(r.height>0?r.width/r.height:3/4);}
+  // 填滿 in landscape uses the screen's shape, not the viewfinder's on-screen box: Safari's toolbars change that box,
+  // and a short moment (e.g. 292 px tall) turned the photo into a thin strip
+  const sA=Math.max(screen.width,screen.height),sB=Math.min(screen.width,screen.height);
+  wantR=rIdx?RATIOS[rIdx][1]:(land&&sA>0&&sB>0?sA/sB:(r.height>0?r.width/r.height:3/4));}
 function draw(){
   const W=ov.width,H=ov.height,d=devicePixelRatio||1;oc.clearRect(0,0,W,H);
   if(cat==='ref'&&refImg){
@@ -1036,7 +1039,7 @@ async function grabPhoto(){
   }catch(e){imgCap=null;showRes();return null;}
 }
 function finish(c){
-  $('rDbg').textContent=`v2026.11.11-29・照片 ${c.width}×${c.height}・相機 ${diag()}`;
+  $('rDbg').textContent=`v2026.11.11-30・照片 ${c.width}×${c.height}・相機 ${diag()}`;
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
