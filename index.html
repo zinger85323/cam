@@ -74,6 +74,9 @@ body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow{display:none!i
 .fbar .tw img{display:block;width:100%;height:100%;object-fit:cover}
 .fbar button.th[aria-pressed="true"] .tw{outline-color:var(--ink)}
 .fbar button.th.rec::after{top:-2px;right:0}
+.fbar .cbadge{position:absolute;top:7px;left:7px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center}
+.fbar .cbadge svg{width:14px;height:14px}
+.fbar .cdiv{flex:0 0 2px;align-self:stretch;margin:10px 2px;border-radius:2px;background:var(--panel)}
 .vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .vf video.mirror{transform:scaleX(-1)}
 .vf canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -123,7 +126,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </head>
 <body>
 <div class="top">
-  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.12-28</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
+  <div style="display:flex;flex-direction:column;line-height:1.2"><b>照著框拍 <span style="font-size:10px;font-weight:400;color:var(--muted)">v2026.11.23-30</span></b><span id="res" style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>
   <div style="display:flex;gap:8px;flex:1;justify-content:space-between">
     <button class="ibtn" id="colorBtn" aria-pressed="false">調色</button>
     <button class="ibtn" id="gridBtn" aria-pressed="true">格線</button>
@@ -153,7 +156,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="wbRow" hidden><span style="min-width:3em">白平衡</span><button class="ibtn" id="wbAuto" aria-pressed="true">自動</button><input id="wbIn" type="range"><output id="wbOut">5000</output></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
     <div class="row" id="dbgRow"><span style="min-width:3em">畫面</span><output id="dbgOut">–</output></div>
-    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.12-28</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.23-30</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
@@ -687,6 +690,12 @@ const FIL={
   film:{n:'電影灰調',sw:'#8C8A84',c:[[0,.07],[.25,.22],[.5,.5],[.75,.79],[1,.93]],sat:.8,sh:[205,.022],hi:[65,.015],grain:.025,vig:.18},
   night:{n:'夜晚提亮',sw:'#3F4A78',c:[[0,.02],[.15,.25],[.5,.62],[1,1]],sat:1.05,vib:.2,sh:[265,.012],hi:[70,.01]},
   mono:{n:'黑白顆粒',sw:'#222',bw:[70,.35],c:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
+  /* the looks of the 相機 cards (hid: not shown in the look list) */
+  c_ccd:{hid:1,n:'CCD 數位',sw:'#8FB5E0',c:[[0,.03],[.25,.24],[.5,.58],[.75,.86],[1,1]],sat:1.12,vib:.1,temp:-.1,tint:-.04,sh:[215,.015],hi:[95,.012],grain:.01,vig:.1},
+  c_inst:{hid:1,n:'拍立得',sw:'#D8C7A8',c:[[0,.1],[.35,.38],[.7,.74],[1,.93]],sat:.82,temp:.14,tint:.03,sh:[190,.022],hi:[75,.02],grain:.022,vig:.16},
+  c_dispo:{hid:1,n:'一次性',sw:'#B8A648',c:[[0,.03],[.25,.2],[.5,.52],[.75,.84],[1,1]],sat:1.08,vib:.2,temp:.28,tint:-.1,sh:[150,.02],hi:[85,.018],grain:.03,vig:.32},
+  c_vhs:{hid:1,n:'錄影帶',sw:'#8A7FA8',c:[[0,.08],[.3,.32],[.6,.62],[1,.9]],sat:.85,temp:-.04,tint:.08,sh:[260,.02],hi:[30,.012],grain:.03,vig:.2},
+  c_film:{hid:1,n:'底片機',sw:'#C9A27E',c:[[0,.04],[.25,.23],[.5,.52],[.75,.8],[1,.96]],sat:.96,temp:.18,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[235,.01],hi:[60,.014],skin:1,grain:.028,vig:.16},
 };
 /* look → function(linear r,g,b, out lab). k = strength 0..1 (blended in Oklab) */
 function makeLook(p,k){
@@ -787,14 +796,17 @@ function recommend(s,cat){
 const LI=new Uint16Array(256),LF=new Float32Array(256);for(let i=0;i<256;i++){const x=i*(N-1)/255;let k=x|0;if(k>N-2)k=N-2;LI[i]=k;LF[i]=x-k;}
 function applyLUT(d,w,h,y0,W,H,lut,fx,seed,pre){
   const gr=(fx.grain||0)*255,vig=fx.vig||0,blk=Math.max(1,Math.round(W/900)),dR=N2*3,dG=N*3;
+  // shift: red and blue are taken from slightly different columns (colour fringing, like cheap lenses and tape)
+  const shf=fx.shift?Math.max(1,Math.round(fx.shift*W)):0,rowR=shf?new Uint8Array(w):null,rowB=shf?new Uint8Array(w):null;
   let VT=null;
   if(vig>0){VT=new Float32Array(258);const a=1/Math.sqrt(Math.pow(1-vig,2.2))-1;for(let i=0;i<258;i++){const q=1+a*i/256;VT[i]=Math.pow(1/(q*q),1/2.2);}}
   const cx=W/2,cy=H/2,rr=256/(cx*cx+cy*cy);let s=seed|0;
   const pr=pre||null,pmap=pr?pr.map:null,mw=pr?pr.mw:0,mh=pr?pr.mh:0,pwg=pr?pr.gr:1,pgg=pr?pr.gg:1,pbg=pr?pr.gb:1,psh=pr?pr.sh:0,phi=pr?pr.hi:0;
   for(let y=0,i=0;y<h;y++){
     const Y=y+y0,dy2=(Y-cy)*(Y-cy),by=(Y/blk)|0,my=pmap?((Y*mh/H)|0)*mw:0;
+    if(shf)for(let x=0,j=i;x<w;x++,j+=4){rowR[x]=d[j];rowB[x]=d[j+2];}
     for(let x=0;x<w;x++,i+=4){
-      let r=d[i],g=d[i+1],b=d[i+2];
+      let r=shf?rowR[x+shf<w?x+shf:w-1]:d[i],g=d[i+1],b=shf?rowB[x>shf?x-shf:0]:d[i+2];
       if(pr){
         r*=pwg;g*=pgg;b*=pbg;                                   // grey-world gains
         if(pmap){const M=pmap[my+((x*mw/W)|0)],Lp=(.2126*r+.7152*g+.0722*b)/255,
@@ -882,13 +894,163 @@ function lookLUT(key){
 function rebuildMatch(){matchLUT=refStats&&liveStats?bake(makeMatch(liveStats,refStats,matchK)):null;}
 let idL=null;function idLUT(){return idL||(idL=bake(makeLook({},0),true));}
 function currentLUT(){if(fil==='none')return awbK||sdK?idLUT():null;return fil==='match'?matchLUT:lookLUT(fil);}
-function currentFX(){const p=fil==='match'||fil==='none'?{}:FIL[fil];return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK};}
+function currentFX(){const p=fil==='match'||fil==='none'?{}:FIL[fil],cam=camActive();return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK,shift:cam&&cam.shift||0};}
 const sc=document.createElement('canvas');sc.width=96;sc.height=96;const sg=sc.getContext('2d',{willReadFrequently:true});
 function statsOf(src,sx,sy,sw,sh){sg.drawImage(src,sx,sy,sw,sh,0,0,96,96);return labStats(sg.getImageData(0,0,96,96).data);}
 
+/* ---------- 相機: one look plus the effects that make a camera feel like itself ----------
+   date    orange date stamp (CCD back)     frame   instant-photo border      leak   light leak from one edge
+   scan    scan lines (tape)                vhs     PLAY ► and date, tape style
+   soft    mix with a blurred copy (soft focus)   glow  highlights bloom, glowTint colours it
+   shift   colour fringing (done in applyLUT)     square  forces the 1:1 frame, put back when the camera is left */
+const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const SVG0='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">';
+const CAMS=[
+  {id:'ccd',n:'CCD 數位',look:'c_ccd',date:1,glow:.3,shift:.0012,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="2.5"/><circle cx="12" cy="13" r="3.6"/><path d="M7 7l1.2-2h3"/><circle cx="17.5" cy="10" r=".6"/></svg>'},
+  {id:'inst',n:'拍立得',look:'c_inst',frame:1,square:1,leak:.3,soft:.16,icon:SVG0+'<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="6.5" y="5.5" width="11" height="9" rx="1"/></svg>'},
+  {id:'dispo',n:'一次性',look:'c_dispo',leak:.42,soft:.22,glow:.18,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="1.5"/><circle cx="12" cy="13" r="3"/><rect x="5" y="9" width="3" height="2"/><path d="M16 9h3"/></svg>'},
+  {id:'vhs',n:'錄影帶',look:'c_vhs',vhs:1,scan:.2,shift:.003,soft:.28,icon:SVG0+'<rect x="3" y="8" width="13" height="9" rx="1.5"/><path d="M16 11l5-2.5v7L16 13"/><circle cx="7" cy="5.5" r="1.2"/></svg>'},
+  {id:'filmcam',n:'底片機',look:'c_film',glow:.4,glowTint:'rgb(255,140,100)',icon:SVG0+'<rect x="3" y="8" width="18" height="11" rx="1.5"/><path d="M8 8l1.2-2.5h5.6L16 8"/><circle cx="12" cy="13.5" r="3.4"/></svg>'},
+];
+let camId=null,camSeed=(Math.random()*1e9)|0,ratioWas=null;
+const SQ=RATIOS.findIndex(r=>r[0]==='1:1');
+function setRatio(i){rIdx=i;$('fillBtn').setAttribute('aria-pressed',rIdx>0);$('fillBtn').textContent=RATIOS[rIdx][0];pc.width=0;sizeCanvas();draw();}
+function camActive(){const c=CAMS.find(x=>x.id===camId);return c&&fil===c.look?c:null;}   // a camera stays on only while its look is the current one
+function syncCam(){
+  if(camId&&!camActive()){camId=null;if(ratioWas!==null){const r=ratioWas;ratioWas=null;setRatio(r);}}
+}
+function pickCam(id){
+  const cam=CAMS.find(c=>c.id===id);camId=id;fil=cam.look;autoFil=false;lookK=1;camSeed=(Math.random()*1e9)|0;
+  if(cam.square&&rIdx!==SQ){if(ratioWas===null)ratioWas=rIdx;setRatio(SQ);}
+  else if(!cam.square&&ratioWas!==null){const r=ratioWas;ratioWas=null;setRatio(r);}
+  buildFbar();
+}
+/* ---------- 星芒: every small bright light grows a cross of rays ----------
+   thr  a light must be at least this bright (0..255) · ex  and this much brighter than its surroundings
+   n    most stars · len ray length (× the short side) · w ray width · diag length of the diagonal rays (0 = none) */
+const STAR=[null,
+  {thr:236,ex:46,n:10,len:.05,w:.0022,diag:0},
+  {thr:226,ex:38,n:22,len:.085,w:.0028,diag:.55},
+  {thr:214,ex:30,n:40,len:.125,w:.0034,diag:.7}];
+let starK=0,starList=null;
+const _sc=document.createElement('canvas'),_sx=_sc.getContext('2d',{willReadFrequently:true});
+/* finds the lights on a canvas: [{x,y,s}] with x,y in 0..1 and s in 0..1 (how strong). Works on a small copy, so it stays cheap. */
+function starFind(g,W,H,lv,final){
+  const P=STAR[lv];if(!P)return null;
+  const sw=final?200:128,sh=Math.max(8,Math.round(sw*H/W));
+  if(_sc.width!==sw||_sc.height!==sh){_sc.width=sw;_sc.height=sh;}
+  _sx.drawImage(g.canvas,0,0,sw,sh);
+  const d=_sx.getImageData(0,0,sw,sh).data,Y=new Float32Array(sw*sh),I=new Float64Array((sw+1)*(sh+1)),B=new Float64Array((sw+1)*(sh+1));
+  for(let i=0,j=0;i<sw*sh;i++,j+=4)Y[i]=.2126*d[j]+.7152*d[j+1]+.0722*d[j+2];
+  // I: brightness sums, B: how many bright pixels, both as integral images so any window costs four reads
+  for(let y=0;y<sh;y++){let row=0,rb=0;for(let x=0;x<sw;x++){const v=Y[y*sw+x],k=(y+1)*(sw+1)+x+1;row+=v;rb+=v>=P.thr-25?1:0;I[k]=I[k-sw-1]+row;B[k]=B[k-sw-1]+rb;}}
+  const r=Math.max(3,Math.round(sw/22)),cand=[];
+  for(let y=1;y<sh-1;y++)for(let x=1;x<sw-1;x++){
+    const k=y*sw+x,v=Y[k];if(v<P.thr)continue;
+    if(Y[k-1]>v||Y[k+1]>v||Y[k-sw]>v||Y[k+sw]>v||Y[k-sw-1]>v||Y[k-sw+1]>v||Y[k+sw-1]>v||Y[k+sw+1]>v)continue;   // only the brightest pixel of a light
+    const x0=Math.max(0,x-r),x1=Math.min(sw,x+r+1),y0=Math.max(0,y-r),y1=Math.min(sh,y+r+1);
+    const mean=(I[y1*(sw+1)+x1]-I[y0*(sw+1)+x1]-I[y1*(sw+1)+x0]+I[y0*(sw+1)+x0])/((x1-x0)*(y1-y0)),ex=v-mean;
+    if(ex<P.ex)continue;                                  // a big bright area (sky, a white wall) is not a point of light
+    const area=(x1-x0)*(y1-y0),bright=B[y1*(sw+1)+x1]-B[y0*(sw+1)+x1]-B[y1*(sw+1)+x0]+B[y0*(sw+1)+x0];
+    if(bright>.2*area)continue;                           // …and neither are the corners and edges of one (a window, a screen)
+    cand.push([x,y,Math.min(1,.3+(ex-P.ex)/80+(v-P.thr)/60),ex+v]);
+  }
+  cand.sort((a,b)=>b[3]-a[3]);
+  const md=Math.max(4,sw/16),max=Math.round(P.n*(final?1:.6)),out=[];
+  for(const c of cand){if(out.length>=max)break;if(out.every(o=>Math.hypot(o[0]-c[0],o[1]-c[1])>=md))out.push(c);}
+  return out.map(o=>({x:(o[0]+.5)/sw,y:(o[1]+.5)/sh,s:o[2]}));
+}
+let _beam=null,_glow=null;
+function starSprites(){
+  if(_beam)return;
+  _beam=document.createElement('canvas');_beam.width=256;_beam.height=16;
+  let b=_beam.getContext('2d'),g=b.createLinearGradient(0,0,256,0);
+  g.addColorStop(0,'rgba(255,240,220,0)');g.addColorStop(.5,'rgba(255,250,240,1)');g.addColorStop(1,'rgba(255,240,220,0)');
+  b.fillStyle=g;b.fillRect(0,0,256,16);
+  b.globalCompositeOperation='destination-in';g=b.createLinearGradient(0,0,0,16);
+  g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.5,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');b.fillStyle=g;b.fillRect(0,0,256,16);
+  _glow=document.createElement('canvas');_glow.width=_glow.height=64;
+  b=_glow.getContext('2d');g=b.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,250,240,.95)');g.addColorStop(.3,'rgba(255,235,205,.35)');g.addColorStop(1,'rgba(255,220,180,0)');
+  b.fillStyle=g;b.fillRect(0,0,64,64);
+}
+function starDraw(g,W,H,list,P){
+  starSprites();const m=Math.min(W,H);
+  g.save();g.globalCompositeOperation='screen';g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+  for(const s of list){
+    const x=s.x*W,y=s.y*H,L=m*P.len*(.55+.45*s.s),wd=Math.max(1.5,m*P.w*(.8+.4*s.s));
+    g.globalAlpha=.45+.55*s.s;
+    const ray=(a,len)=>{g.save();g.translate(x,y);g.rotate(a);g.drawImage(_beam,-len,-wd,2*len,2*wd);g.restore();};
+    ray(0,L);ray(Math.PI/2,L);
+    if(P.diag){g.globalAlpha*=.8;ray(Math.PI/4,L*P.diag);ray(-Math.PI/4,L*P.diag);}
+    g.globalAlpha=.4+.5*s.s;const gr=L*.3;g.drawImage(_glow,x-gr,y-gr,2*gr,2*gr);
+  }
+  g.restore();
+}
+const _s1=document.createElement('canvas'),_s2=document.createElement('canvas');
+/* draws the camera's effects (and the stars, if any) over a finished picture (the preview canvas or the full-size photo) */
+function camFX(g,W,H,cam,seed,stars,lv){
+  if(!cam&&!(stars&&stars.length))return;
+  cam=cam||{};
+  const cv=g.canvas,m=Math.min(W,H),d=new Date();
+  g.save();
+  if(cam.soft||cam.glow){
+    // two small steps down make a clean blur without ctx.filter (Safari has none)
+    const w1=Math.max(8,Math.round(W/4)),h1=Math.max(8,Math.round(H/4)),w2=Math.max(6,Math.round(W/12)),h2=Math.max(6,Math.round(H/12));
+    if(_s1.width!==w1||_s1.height!==h1){_s1.width=w1;_s1.height=h1;}
+    if(_s2.width!==w2||_s2.height!==h2){_s2.width=w2;_s2.height=h2;}
+    const a=_s1.getContext('2d'),b=_s2.getContext('2d');
+    a.imageSmoothingQuality=b.imageSmoothingQuality='high';a.globalCompositeOperation=b.globalCompositeOperation='source-over';
+    a.drawImage(cv,0,0,w1,h1);b.drawImage(_s1,0,0,w2,h2);
+    g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+    if(cam.soft){g.globalAlpha=cam.soft;g.drawImage(_s2,0,0,W,H);g.globalAlpha=1;}
+    if(cam.glow){                       // highlights only: square the blur, tint it, add it back
+      b.globalCompositeOperation='multiply';b.drawImage(_s2,0,0);
+      if(cam.glowTint){b.fillStyle=cam.glowTint;b.fillRect(0,0,w2,h2);}
+      b.globalCompositeOperation='source-over';
+      g.globalCompositeOperation='screen';g.globalAlpha=cam.glow;g.drawImage(_s2,0,0,W,H);g.globalAlpha=1;g.globalCompositeOperation='source-over';
+    }
+  }
+  if(cam.leak){
+    const side=seed%4,t=((seed>>3)%100)/100,P=[[0,t*H],[W,t*H],[t*W,0],[t*W,H]][side],gr=g.createRadialGradient(P[0],P[1],0,P[0],P[1],m*.9);
+    gr.addColorStop(0,`rgba(255,90,40,${cam.leak})`);gr.addColorStop(.45,`rgba(255,160,60,${cam.leak*.45})`);gr.addColorStop(1,'rgba(255,200,80,0)');
+    g.globalCompositeOperation='screen';g.fillStyle=gr;g.fillRect(0,0,W,H);g.globalCompositeOperation='source-over';
+  }
+  if(cam.scan){const st=Math.max(3,Math.round(H/240));g.fillStyle=`rgba(0,0,0,${cam.scan})`;for(let y=0;y<H;y+=st)g.fillRect(0,y,W,Math.max(1,st/2));}
+  if(stars&&stars.length)starDraw(g,W,H,stars,STAR[lv]);
+  const mono='"Courier New",ui-monospace,Menlo,monospace';
+  if(cam.date){
+    const fs=Math.max(11,Math.round(m*.045));g.font=`bold ${fs}px ${mono}`;g.textAlign='right';g.textBaseline='alphabetic';
+    g.shadowColor='rgba(255,120,0,.9)';g.shadowBlur=fs*.45;g.fillStyle='#ff9b2e';
+    g.fillText(`'${String(d.getFullYear()).slice(2)} ${d.getMonth()+1} ${d.getDate()}`,W-fs*1.1,H-fs*1.1);g.shadowBlur=0;
+  }
+  if(cam.vhs){
+    const fs=Math.max(11,Math.round(m*.05));g.font=`bold ${fs}px ${mono}`;g.textAlign='left';g.textBaseline='alphabetic';
+    g.shadowColor='rgba(0,0,0,.8)';g.shadowBlur=fs*.2;g.fillStyle='#fff';
+    g.fillText('PLAY ►',fs*1.1,fs*1.9);g.fillText(`${MON[d.getMonth()]}. ${d.getDate()} ${d.getFullYear()}`,fs*1.1,H-fs*1.1);g.shadowBlur=0;
+  }
+  if(cam.frame){
+    const s=m*.05,bt=m*.15;g.fillStyle='#f3efe4';
+    g.fillRect(0,0,W,s);g.fillRect(0,0,s,H);g.fillRect(W-s,0,s,H);g.fillRect(0,H-bt,W,bt);
+    g.strokeStyle='rgba(0,0,0,.12)';g.lineWidth=Math.max(1,m*.003);g.strokeRect(s,s,W-2*s,H-s-bt);
+  }
+  g.restore();
+}
+
 /* filter chips */
 function buildFbar(){
+  syncCam();
   const box=$('fbar');box.innerHTML='';
+  CAMS.forEach(cm=>{
+    const b=document.createElement('button');b.className='th cam';
+    b.innerHTML=`<span class="tw" data-k="${cm.look}" style="background:${FIL[cm.look].sw}">${thumbs[cm.look]?`<img src="${thumbs[cm.look]}" alt="">`:''}</span><span class="cbadge">${cm.icon}</span><span class="tl">${cm.n}</span>`;
+    b.setAttribute('aria-pressed',!!camActive()&&camId===cm.id);
+    b.onclick=()=>{if(camActive()&&camId===cm.id){fil='none';syncCam();buildFbar();}else pickCam(cm.id);};   // tap the lit camera again to turn it off
+    box.appendChild(b);
+  });
+  const dv=document.createElement('span');dv.className='cdiv';box.appendChild(dv);
+  const sb=document.createElement('button');sb.textContent='星芒 '+['關','柔','中','強'][starK];sb.setAttribute('aria-pressed',starK>0);
+  sb.onclick=()=>{starK=(starK+1)%4;starList=null;buildFbar();};box.appendChild(sb);   // 關 → 柔 → 中 → 強
   const a=document.createElement('button');a.textContent='自動';a.setAttribute('aria-pressed',autoFil);
   a.onclick=()=>{autoFil=!autoFil;if(autoFil&&recFil)fil=recFil;buildFbar();};box.appendChild(a);
   // 追色 chip: first tap picks a reference photo, later taps select it; tap again while selected to change photo
@@ -897,6 +1059,7 @@ function buildFbar(){
   m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;rebuildMatch();buildFbar();};
   box.appendChild(m);
   Object.entries(FIL).forEach(([k,p])=>{
+    if(p.hid)return;
     const b=document.createElement('button');b.className='th'+(k===recFil?' rec':'');
     b.innerHTML=`<span class="tw" data-k="${k}" style="background:${p.sw}">${thumbs[k]?`<img src="${thumbs[k]}" alt="">`:''}</span><span class="tl">${p.n}</span>`;
     b.setAttribute('aria-pressed',fil===k);
@@ -961,7 +1124,7 @@ $('matchIn').onchange=async e=>{
 const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true}),PW=[360,480,640];
 let pi=1,pms=12,frame=0;
 function loop(){
-  const lut=stream&&v.videoWidth?currentLUT():null;
+  const lut=stream&&v.videoWidth?(currentLUT()||(starK?idLUT():null)):null;     // stars alone also need the processed preview
   if(pc.hidden!==!lut)pc.hidden=!lut;
   if(lut){
     const rot=rotL(),[sx,sy,sw,sh]=rot?crop(v.videoHeight,v.videoWidth):crop(v.videoWidth,v.videoHeight),W=PW[pi],H=Math.round(W*sh/sw);
@@ -972,6 +1135,8 @@ function loop(){
     const t=performance.now(),img=pg.getImageData(0,0,W,H);
     // no grain in the live view: at preview size each grain dot is blown up several times and flickers like noise
     applyLUT(img.data,W,H,0,W,H,lut,{...currentFX(),grain:0},++frame*7919,pre);pg.putImageData(img,0,0);
+    if(starK&&(frame%3===0||!starList))starList=starFind(pg,W,H,starK,false);    // look for lights every third frame
+    camFX(pg,W,H,camActive(),camSeed,starK?starList:null,starK);
     pms=pms*.9+(performance.now()-t)*.1;
     if(pms>24&&pi>0){pi--;pms=13;}else if(pms<7&&pi<2){pi++;pms=13;}
   }
@@ -994,7 +1159,10 @@ async function develop(c,srcStats){
   let lut=currentLUT();
   if(fil==='match'&&refStats&&srcStats)lut=bake(makeMatch(srcStats,refStats,matchK),true);
   const pre=makePre(awbK?statsOf(c,0,0,c.width,c.height):null,c,c.width,c.height);
-  if(!lut&&!pre)return c;
+  if(!lut&&!pre){
+    if(starK){const g0=c.getContext('2d');camFX(g0,c.width,c.height,null,0,starFind(g0,c.width,c.height,starK,true),starK);}
+    return c;
+  }
   if(!lut)lut=idLUT();
   const g=c.getContext('2d'),w=c.width,h=c.height,fx=currentFX(),seed=(Math.random()*1e9)|0,rows=Math.max(16,Math.floor(1048576/w));
   $('busy').hidden=false;await new Promise(r=>setTimeout(r,30));
@@ -1004,6 +1172,7 @@ async function develop(c,srcStats){
       if(n%4===3)await new Promise(r=>setTimeout(r));
     }
   }finally{$('busy').hidden=true;}
+  camFX(g,w,h,camActive(),camSeed,starK?starFind(g,w,h,starK,true):null,starK);
   return c;
 }
 function grab(){
@@ -1030,7 +1199,8 @@ async function grabPhoto(){
   }catch(e){imgCap=null;showRes();return null;}
 }
 function finish(c){
-  $('rDbg').textContent=`v2026.11.12-28・照片 ${c.width}×${c.height}・相機 ${diag()}`;
+  camSeed=(Math.random()*1e9)|0;   // the next shot gets a different light leak
+  $('rDbg').textContent=`v2026.11.23-30・照片 ${c.width}×${c.height}・相機 ${diag()}`;
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
