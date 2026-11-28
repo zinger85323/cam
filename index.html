@@ -54,13 +54,19 @@ body.lscape #tabs button{padding:6px 10px;font-size:13px}
 body.lscape .top{display:flex;position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px;z-index:5;margin:0;padding:0;background:none;border:0}
 body.lscape #stripBtn{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:58px;z-index:5;margin:0}
 body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px calc(10px + env(safe-area-inset-left,0px)) 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
-body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
+body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow,body.lscape.cp #palRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
 body.lscape.cp #fbar{top:calc(56px + env(safe-area-inset-top,0px))}
 body.lscape.cp #fixRow,body.lscape.cp #matchRow{bottom:104px}
+body.lscape.cp #palRow{bottom:136px}
+body.lscape.palon #fixRow{display:none!important}   /* landscape is tight: the palette row takes the white-balance row's place */
 /* 填滿: the viewfinder takes the space the phone leaves; the photo is cropped to that same shape */
 body.fill:not(.lscape) .vf{aspect-ratio:auto;flex:1 1 auto;min-height:0;max-height:none}
 /* color panel: hidden until 調色 is tapped */
-body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow{display:none!important}
+body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow,body:not(.cp) #palRow{display:none!important}
+.fbar,.refbox{flex-shrink:0}
+.pal{display:flex;width:100%;height:38px;border-radius:10px;overflow:hidden}
+.pal label{flex:1;position:relative}
+.pal input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0}
 .fbar{display:flex;align-items:center;gap:8px;overflow-x:auto;padding:6px max(14px,env(safe-area-inset-left,0px)) 2px;scrollbar-width:none}
 .fbar::-webkit-scrollbar{display:none}
 .fbar button{flex:0 0 auto;position:relative;background:var(--panel);color:var(--ink);border:0;border-radius:99px;padding:7px 13px;font:500 13px var(--f)}
@@ -145,6 +151,7 @@ body.lscape .rb{width:44px;height:44px}
 .level .lr.a{left:8%}.level .lr.b{right:8%}
 .level.ok .lv,.level.ok .lr{background:var(--accent)}
 .level.flat{opacity:.25}
+#flashRow{display:none!important}   /* flash now lives only in the round button above the shutter */
 #review{position:fixed;inset:0;z-index:5;background:var(--bg);display:flex;flex-direction:column;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 14px calc(16px + env(safe-area-inset-bottom,0px))}
 #review img{flex:1;min-height:0;width:100%;object-fit:contain;border-radius:12px}
 #review .row{display:flex;gap:10px}
@@ -183,14 +190,20 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="flashRow" hidden><button class="ibtn" id="flashBtn" aria-pressed="false">閃光燈 關</button></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
     <div class="row" id="dbgRow"><span style="min-width:3em">畫面</span><output id="dbgOut">–</output></div>
-    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.24-33</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.28-36</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
 <div class="fbar" id="fbar"></div>
 <input id="matchIn" type="file" accept="image/*" hidden>
+<input id="palIn" type="file" accept="image/*" hidden>
 <div class="refbox" id="matchRow" hidden>
   <div class="row"><span>強度</span><input id="matchK" type="range" min="10" max="100" step="5" value="100"><output id="matchOut" style="color:var(--muted);min-width:3ch;font-variant-numeric:tabular-nums">100</output></div>
+</div>
+
+<div class="refbox" id="palRow" hidden>
+  <div class="pal" id="palSw"></div>
+  <div class="row"><button class="ibtn" id="palPhoto">換照片</button><button class="ibtn" id="palLive">取自畫面</button><span style="color:var(--muted)">點色塊可以改顏色</span></div>
 </div>
 
 <button class="ibtn" id="lcBtn" aria-expanded="false">選項 ▸</button>
@@ -524,7 +537,7 @@ async function prepPhoto(){
 }
 function showRes(){
   if(!v.videoWidth)return;const [, , sw,sh]=crop(v.videoWidth,v.videoHeight);
-  const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}・${fil==='none'?'原色':fil==='match'?'追色':FIL[fil].n}`;
+  const mp=(sw*sh/1e6).toFixed(1);$('res').textContent=`${Math.round(sw)}×${Math.round(sh)}・${mp}MP${imgCap?'・原生拍照':''}・${fil==='none'?'原色':fil==='match'?'追色':fil==='pal'?'色票':FIL[fil].n}`;
 }
 async function mapLenses(){
   let cams=[];try{cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');}catch(e){}
@@ -741,33 +754,33 @@ const skinW=(L,C,h)=>win(h,55,30)*ss(.025,.06,C)*(1-ss(.2,.28,C))*ss(.25,.4,L)*(
    grain film grain · vig vignette */
 const FIL={
   none:{n:'原色',sw:'#9a9a9a'},
-  cchrome:{n:'經典正片',sw:'#7C8A8F',c:[[0,.03],[.2,.15],[.5,.5],[.8,.85],[1,.96]],sat:.82,bands:[{h:29,w:40,ds:.8},{h:255,w:55,dh:-14,ds:.85,dl:.95},{h:140,w:45,dh:-8,ds:.8}],sh:[225,.012],hi:[80,.008],grain:.02,vig:.08},
-  cneg:{n:'經典負片',sw:'#6F8C86',c:[[0,.05],[.25,.2],[.5,.5],[.75,.8],[1,.93]],sat:.8,bands:[{h:140,w:45,dh:12,ds:.8},{h:29,w:35,dl:.95},{h:255,w:50,dh:-8,ds:.82}],sh:[190,.02],hi:[70,.012],grain:.03,vig:.12},
-  velvia:{n:'鮮豔風景',sw:'#2E8B57',c:[[0,0],[.25,.19],[.5,.51],[.75,.83],[1,1]],sat:1.15,vib:.4,bands:[{h:140,w:45,ds:1.15},{h:250,w:50,ds:1.15,dl:.95}],skin:.85,vig:.15},
-  hassel:{n:'自然膚色',sw:'#D8B8A0',c:[[0,.02],[.25,.25],[.5,.52],[.75,.78],[1,.97]],sat:1,vib:.1,skin:1,hi:[70,.004],vig:.05},
-  leica:{n:'德味濃郁',sw:'#8B2E2E',c:[[0,0],[.2,.13],[.5,.48],[.8,.86],[1,.98]],sat:1.04,bands:[{h:29,w:35,ds:1.15,dl:.94},{h:140,w:45,ds:.88}],sh:[260,.006],hi:[75,.008],grain:.015,vig:.28},
-  gpos:{n:'街拍正片',sw:'#C8913A',c:[[0,0],[.25,.17],[.5,.5],[.75,.85],[1,1]],sat:1.1,vib:.2,sh:[250,.018],hi:[95,.015],grain:.02,vig:.15},
-  gneg:{n:'街拍負片',sw:'#8FA8A0',c:[[0,.08],[.3,.3],[.6,.6],[1,.9]],sat:.74,sh:[170,.016],hi:[100,.008],grain:.03,vig:.1},
-  portra:{n:'人像膠片',sw:'#D9A98A',c:[[0,.05],[.25,.25],[.5,.53],[.75,.8],[1,.96]],sat:.94,temp:.15,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[230,.008],hi:[70,.012],skin:1,grain:.025,vig:.12},
-  greenneg:{n:'綠調負片',sw:'#7E9A7A',c:[[0,.06],[.3,.28],[.6,.62],[1,.95]],sat:.86,tint:-.2,sh:[165,.02],hi:[110,.008],grain:.03,vig:.15},
-  golden:{n:'金黃日落',sw:'#E2A44A',c:[[0,.03],[.25,.24],[.5,.54],[.75,.82],[1,.98]],sat:1.05,vib:.15,temp:.5,sh:[40,.006],hi:[75,.02],grain:.02,vig:.2},
-  slide:{n:'高反差正片',sw:'#2F6FB0',c:[[0,0],[.25,.18],[.5,.5],[.75,.84],[1,1]],sat:1.12,vib:.3,bands:[{h:250,w:50,ds:1.1,dl:.92}],sh:[260,.01],grain:.015,vig:.22},
-  polaroid:{n:'復古拍立得',sw:'#C9B79A',c:[[0,.12],[.4,.42],[.75,.78],[1,.9]],sat:.8,temp:.2,sh:[215,.02],hi:[90,.02],grain:.03,vig:.25},
-  vivid:{n:'自然鮮明',sw:'#E7A34B',c:[[0,0],[.25,.22],[.5,.52],[.75,.8],[1,1]],sat:1.03,vib:.35,vig:.1},
-  milk:{n:'日系奶白',sw:'#F1E6D8',c:[[0,.08],[.3,.38],[.6,.7],[1,.97]],sat:.84,temp:-.05,sh:[240,.008],hi:[80,.006],grain:.015},
+  cchrome:{n:'富士 Classic Chrome',sw:'#7C8A8F',c:[[0,.03],[.2,.15],[.5,.5],[.8,.85],[1,.96]],sat:.82,bands:[{h:29,w:40,ds:.8},{h:255,w:55,dh:-14,ds:.85,dl:.95},{h:140,w:45,dh:-8,ds:.8}],sh:[225,.012],hi:[80,.008],grain:.02,vig:.08},
+  cneg:{n:'富士 Classic Neg.',sw:'#6F8C86',c:[[0,.05],[.25,.2],[.5,.5],[.75,.8],[1,.93]],sat:.8,bands:[{h:140,w:45,dh:12,ds:.8},{h:29,w:35,dl:.95},{h:255,w:50,dh:-8,ds:.82}],sh:[190,.02],hi:[70,.012],grain:.03,vig:.12},
+  velvia:{n:'富士 Velvia',sw:'#2E8B57',c:[[0,0],[.25,.19],[.5,.51],[.75,.83],[1,1]],sat:1.15,vib:.4,bands:[{h:140,w:45,ds:1.15},{h:250,w:50,ds:1.15,dl:.95}],skin:.85,vig:.15},
+  hassel:{n:'哈蘇 Hasselblad',sw:'#D8B8A0',c:[[0,.02],[.25,.25],[.5,.52],[.75,.78],[1,.97]],sat:1,vib:.1,skin:1,hi:[70,.004],vig:.05},
+  leica:{n:'徠卡 Leica',sw:'#8B2E2E',c:[[0,0],[.2,.13],[.5,.48],[.8,.86],[1,.98]],sat:1.04,bands:[{h:29,w:35,ds:1.15,dl:.94},{h:140,w:45,ds:.88}],sh:[260,.006],hi:[75,.008],grain:.015,vig:.28},
+  gpos:{n:'理光 GR 正片',sw:'#C8913A',c:[[0,0],[.25,.17],[.5,.5],[.75,.85],[1,1]],sat:1.1,vib:.2,sh:[250,.018],hi:[95,.015],grain:.02,vig:.15},
+  gneg:{n:'理光 GR 負片',sw:'#8FA8A0',c:[[0,.08],[.3,.3],[.6,.6],[1,.9]],sat:.74,sh:[170,.016],hi:[100,.008],grain:.03,vig:.1},
+  portra:{n:'柯達 Portra',sw:'#D9A98A',c:[[0,.05],[.25,.25],[.5,.53],[.75,.8],[1,.96]],sat:.94,temp:.15,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[230,.008],hi:[70,.012],skin:1,grain:.025,vig:.12},
+  greenneg:{n:'富士 C200',sw:'#7E9A7A',c:[[0,.06],[.3,.28],[.6,.62],[1,.95]],sat:.86,tint:-.2,sh:[165,.02],hi:[110,.008],grain:.03,vig:.15},
+  golden:{n:'柯達 Gold 200',sw:'#E2A44A',c:[[0,.03],[.25,.24],[.5,.54],[.75,.82],[1,.98]],sat:1.05,vib:.15,temp:.5,sh:[40,.006],hi:[75,.02],grain:.02,vig:.2},
+  slide:{n:'柯達 Ektachrome',sw:'#2F6FB0',c:[[0,0],[.25,.18],[.5,.5],[.75,.84],[1,1]],sat:1.12,vib:.3,bands:[{h:250,w:50,ds:1.1,dl:.92}],sh:[260,.01],grain:.015,vig:.22},
+  polaroid:{n:'寶麗來 Polaroid',sw:'#C9B79A',c:[[0,.12],[.4,.42],[.75,.78],[1,.9]],sat:.8,temp:.2,sh:[215,.02],hi:[90,.02],grain:.03,vig:.25},
+  vivid:{n:'富士 Provia',sw:'#E7A34B',c:[[0,0],[.25,.22],[.5,.52],[.75,.8],[1,1]],sat:1.03,vib:.35,vig:.1},
+  milk:{n:'富士 Pro 400H',sw:'#F1E6D8',c:[[0,.08],[.3,.38],[.6,.7],[1,.97]],sat:.84,temp:-.05,sh:[240,.008],hi:[80,.006],grain:.015},
   latte:{n:'奶茶暖調',sw:'#C8A07A',c:[[0,.06],[.5,.53],[1,.96]],sat:.9,temp:.3,sh:[50,.01],hi:[80,.01],grain:.02,vig:.1},
   tasty:{n:'美味暖色',sw:'#E07A3C',c:[[0,0],[.25,.21],[.5,.53],[.75,.82],[1,1]],sat:1.06,vib:.3,temp:.2,bands:[{h:50,w:40,ds:1.1}],skin:.3,vig:.12},
   clear:{n:'清透藍',sw:'#7FB2DE',c:[[0,.03],[.5,.55],[1,1]],sat:1.02,vib:.15,temp:-.3,bands:[{h:250,w:50,ds:1.1}],hi:[230,.006]},
   forest:{n:'森林綠',sw:'#6E9070',c:[[0,.05],[.25,.24],[.6,.62],[1,.95]],sat:.94,bands:[{h:140,w:45,dh:8,ds:.95,dl:.92}],sh:[180,.015],hi:[85,.012],grain:.02,vig:.12},
   film:{n:'電影灰調',sw:'#8C8A84',c:[[0,.07],[.25,.22],[.5,.5],[.75,.79],[1,.93]],sat:.8,sh:[205,.022],hi:[65,.015],grain:.025,vig:.18},
   night:{n:'夜晚提亮',sw:'#3F4A78',c:[[0,.02],[.15,.25],[.5,.62],[1,1]],sat:1.05,vib:.2,sh:[265,.012],hi:[70,.01]},
-  mono:{n:'黑白顆粒',sw:'#222',bw:[70,.35],c:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
+  mono:{n:'柯達 Tri-X',sw:'#222',bw:[70,.35],c:[[0,.04],[.25,.2],[.5,.5],[.75,.82],[1,.97]],grain:.045,vig:.2},
   /* the looks of the 相機 cards (hid: not shown in the look list) */
-  c_ccd:{hid:1,n:'CCD 數位',sw:'#8FB5E0',c:[[0,.03],[.25,.24],[.5,.58],[.75,.86],[1,1]],sat:1.12,vib:.1,temp:-.1,tint:-.04,sh:[215,.015],hi:[95,.012],grain:.01,vig:.1},
-  c_inst:{hid:1,n:'拍立得',sw:'#D8C7A8',c:[[0,.1],[.35,.38],[.7,.74],[1,.93]],sat:.82,temp:.14,tint:.03,sh:[190,.022],hi:[75,.02],grain:.022,vig:.16},
-  c_dispo:{hid:1,n:'一次性',sw:'#B8A648',c:[[0,.03],[.25,.2],[.5,.52],[.75,.84],[1,1]],sat:1.08,vib:.2,temp:.28,tint:-.1,sh:[150,.02],hi:[85,.018],grain:.03,vig:.32},
-  c_vhs:{hid:1,n:'錄影帶',sw:'#8A7FA8',c:[[0,.08],[.3,.32],[.6,.62],[1,.9]],sat:.85,temp:-.04,tint:.08,sh:[260,.02],hi:[30,.012],grain:.03,vig:.2},
-  c_film:{hid:1,n:'底片機',sw:'#C9A27E',c:[[0,.04],[.25,.23],[.5,.52],[.75,.8],[1,.96]],sat:.96,temp:.18,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[235,.01],hi:[60,.014],skin:1,grain:.028,vig:.16},
+  c_ccd:{hid:1,n:'索尼 Cyber-shot',sw:'#8FB5E0',c:[[0,.03],[.25,.24],[.5,.58],[.75,.86],[1,1]],sat:1.12,vib:.1,temp:-.1,tint:-.04,sh:[215,.015],hi:[95,.012],grain:.01,vig:.1},
+  c_inst:{hid:1,n:'富士 Instax',sw:'#D8C7A8',c:[[0,.1],[.35,.38],[.7,.74],[1,.93]],sat:.82,temp:.14,tint:.03,sh:[190,.022],hi:[75,.02],grain:.022,vig:.16},
+  c_dispo:{hid:1,n:'柯達 FunSaver',sw:'#B8A648',c:[[0,.03],[.25,.2],[.5,.52],[.75,.84],[1,1]],sat:1.08,vib:.2,temp:.28,tint:-.1,sh:[150,.02],hi:[85,.018],grain:.03,vig:.32},
+  c_vhs:{hid:1,n:'索尼 Handycam',sw:'#8A7FA8',c:[[0,.08],[.3,.32],[.6,.62],[1,.9]],sat:.85,temp:-.04,tint:.08,sh:[260,.02],hi:[30,.012],grain:.03,vig:.2},
+  c_film:{hid:1,n:'康泰時 T2',sw:'#C9A27E',c:[[0,.04],[.25,.23],[.5,.52],[.75,.8],[1,.96]],sat:.96,temp:.18,bands:[{h:140,w:45,dh:-6,ds:.9}],sh:[235,.01],hi:[60,.014],skin:1,grain:.028,vig:.16},
 };
 /* look → function(linear r,g,b, out lab). k = strength 0..1 (blended in Oklab) */
 function makeLook(p,k){
@@ -847,6 +860,53 @@ function makeMatch(S,R,k){
     const kc=k*(1-.5*skinW(L,C,h)),a2=sa+oa+(a-sa)*sg,b2=sb+ob+(b-sb)*sg;       // skin moves half as far
     o[0]=L+(L2-L)*k;o[1]=a+(a2-a)*kc;o[2]=b+(b2-b)*kc;
   };
+}
+/* 色票配色: pull the picture's colours toward a small palette.
+   Each coloured pixel turns toward the palette colours that sit near its hue and lightness; hues with no palette colour nearby fade,
+   and near-grey areas pick up a faint tint from the palette colour of the same lightness. Lightness is left alone. */
+function makePal(P,k){
+  const lab=[0,0,0];
+  return (Rl,Gl,Bl,o)=>{
+    lin2lab(Rl,Gl,Bl,lab);const L=lab[0],a=lab[1],b=lab[2],C=Math.hypot(a,b);let h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
+    const sat=ss(.012,.07,C),kk=k*(1-.5*skinW(L,C,h));
+    let sw=0,ta=0,tb=0,a2=a,b2=b;
+    for(let i=0;i<P.length;i++){const q=P[i];if(q.C<.012)continue;
+      const dh=Math.abs(((h-q.h+540)%360)-180),dl=(L-q.L)/.3,w=Math.exp(-(dh/38)*(dh/38)-dl*dl);sw+=w;ta+=w*q.a;tb+=w*q.b;}
+    if(sw>1e-3){
+      ta/=sw;tb/=sw;const g=Math.min(1,sw*1.5),th=Math.atan2(tb,ta),tc=Math.hypot(ta,tb),hr=h*RAD;
+      let dh=th-hr;dh=Math.atan2(Math.sin(dh),Math.cos(dh));
+      const f=kk*sat*g*.85,hn=hr+dh*f,cn=C+(tc-C)*f*.6,fade=1-kk*sat*(1-g)*.55;
+      a2=cn*Math.cos(hn)*fade;b2=cn*Math.sin(hn)*fade;
+    }else{const fade=1-kk*sat*.55;a2*=fade;b2*=fade;}
+    let tw=0,la=0,lb=0;
+    for(let i=0;i<P.length;i++){const q=P[i],d=(L-q.L)/.2,w=Math.exp(-d*d);tw+=w;la+=w*q.a;lb+=w*q.b;}
+    if(tw>1e-3){la/=tw;lb/=tw;const m=Math.hypot(la,lb);if(m>.04){la*=.04/m;lb*=.04/m;}
+      const t=kk*(1-sat)*.8*Math.min(1,tw);a2+=la*t;b2+=lb*t;}
+    o[0]=L;o[1]=a2;o[2]=b2;
+  };
+}
+function palEntry(L,a,b){
+  const C=Math.hypot(a,b);let h=Math.atan2(b,a)/RAD;if(h<0)h+=360;
+  const out=new Float32Array(3);labToSrgb(L,a,b,out,0,false);
+  const hex='#'+[0,1,2].map(c=>Math.round(Math.max(0,Math.min(255,out[c]))).toString(16).padStart(2,'0')).join('');
+  return{L,a,b,C,h,hex};
+}
+function palFromHex(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16),o=[0,0,0];lin2lab(DEC[r],DEC[g],DEC[b],o);return palEntry(o[0],o[1],o[2]);}
+/* five main colours of a picture: k-means in Oklab, starting from five lightness quantiles so the palette spans dark to light */
+function palFromData(d){
+  const n=d.length>>2,Ls=new Float32Array(n),As=new Float32Array(n),Bs=new Float32Array(n),o=[0,0,0],K=5;
+  for(let i=0,j=0;i<n;i++,j+=4){lin2lab(DEC[d[j]],DEC[d[j+1]],DEC[d[j+2]],o);Ls[i]=o[0];As[i]=o[1];Bs[i]=o[2];}
+  const idx=Array.from({length:n},(_,i)=>i).sort((x,y)=>Ls[x]-Ls[y]);
+  const cL=[],cA=[],cB=[],cn=new Array(K).fill(0);
+  for(let k=0;k<K;k++){const p=idx[Math.floor((k+.5)/K*(n-1))];cL.push(Ls[p]);cA.push(As[p]);cB.push(Bs[p]);}
+  for(let it=0;it<10;it++){
+    const sL=new Float64Array(K),sA=new Float64Array(K),sB=new Float64Array(K);cn.fill(0);
+    for(let i=0;i<n;i++){let best=0,bd=1e9;
+      for(let k=0;k<K;k++){const dl=(Ls[i]-cL[k])*.45,da=As[i]-cA[k],db=Bs[i]-cB[k],dd=dl*dl+da*da+db*db;if(dd<bd){bd=dd;best=k;}}
+      sL[best]+=Ls[i];sA[best]+=As[i];sB[best]+=Bs[i];cn[best]++;}
+    for(let k=0;k<K;k++)if(cn[k]){cL[k]=sL[k]/cn[k];cA[k]=sA[k]/cn[k];cB[k]=sB[k]/cn[k];}
+  }
+  return cL.map((L,k)=>palEntry(L,cA[k],cB[k])).sort((x,y)=>x.L-y.L);
 }
 /* which look suits this scene */
 function recommend(s,cat){
@@ -957,16 +1017,18 @@ function crop(vw,vh){const want=wantR;let sw=vw,sh=vh;if(vw/vh>want)sw=vh*want;e
 /* ---------- current look ---------- */
 let fil='none',autoFil=false,recFil=null,lookK=1,matchK=.8,awbK=0,sdK=0;
 let refStats=null,refThumb=null,liveStats=null,matchLUT=null;
+let pal=null,palK=.7,palLUT=null;   // 色票配色: up to five colours (Oklab + hex) and how hard the picture is pulled toward them
 const lutCache=new Map();
 function lookLUT(key){
   const id=key+'@'+Math.round(lookK*20);let l=lutCache.get(id);
   if(!l){if(lutCache.size>10)lutCache.clear();l=bake(makeLook(FIL[key],Math.round(lookK*20)/20),true);lutCache.set(id,l);}
   return l;
 }
+function rebuildPal(){palLUT=pal?bake(makePal(pal,palK),true):null;}
 function rebuildMatch(){matchLUT=refStats&&liveStats?bake(makeMatch(liveStats,refStats,matchK)):null;}
 let idL=null;function idLUT(){return idL||(idL=bake(makeLook({},0),true));}
-function currentLUT(){if(fil==='none')return awbK||sdK?idLUT():null;return fil==='match'?matchLUT:lookLUT(fil);}
-function currentFX(){const p=fil==='match'||fil==='none'?{}:FIL[fil],cam=camActive();return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK,shift:cam&&cam.shift||0};}
+function currentLUT(){if(fil==='none')return awbK||sdK?idLUT():null;return fil==='match'?matchLUT:fil==='pal'?palLUT:lookLUT(fil);}
+function currentFX(){const p=fil==='match'||fil==='pal'||fil==='none'?{}:FIL[fil],cam=camActive();return{grain:(p.grain||0)*lookK,vig:(p.vig||0)*lookK,shift:cam&&cam.shift||0};}
 const sc=document.createElement('canvas');sc.width=96;sc.height=96;const sg=sc.getContext('2d',{willReadFrequently:true});
 function statsOf(src,sx,sy,sw,sh){sg.drawImage(src,sx,sy,sw,sh,0,0,96,96);return labStats(sg.getImageData(0,0,96,96).data);}
 
@@ -978,11 +1040,11 @@ function statsOf(src,sx,sy,sw,sh){sg.drawImage(src,sx,sy,sw,sh,0,0,96,96);return
 const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const SVG0='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">';
 const CAMS=[
-  {id:'ccd',n:'CCD 數位',look:'c_ccd',date:1,glow:.3,shift:.0012,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="2.5"/><circle cx="12" cy="13" r="3.6"/><path d="M7 7l1.2-2h3"/><circle cx="17.5" cy="10" r=".6"/></svg>'},
-  {id:'inst',n:'拍立得',look:'c_inst',frame:1,square:1,leak:.3,soft:.16,icon:SVG0+'<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="6.5" y="5.5" width="11" height="9" rx="1"/></svg>'},
-  {id:'dispo',n:'一次性',look:'c_dispo',leak:.42,soft:.22,glow:.18,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="1.5"/><circle cx="12" cy="13" r="3"/><rect x="5" y="9" width="3" height="2"/><path d="M16 9h3"/></svg>'},
-  {id:'vhs',n:'錄影帶',look:'c_vhs',vhs:1,scan:.2,shift:.003,soft:.28,icon:SVG0+'<rect x="3" y="8" width="13" height="9" rx="1.5"/><path d="M16 11l5-2.5v7L16 13"/><circle cx="7" cy="5.5" r="1.2"/></svg>'},
-  {id:'filmcam',n:'底片機',look:'c_film',glow:.4,glowTint:[1,.6,.45],icon:SVG0+'<rect x="3" y="8" width="18" height="11" rx="1.5"/><path d="M8 8l1.2-2.5h5.6L16 8"/><circle cx="12" cy="13.5" r="3.4"/></svg>'},
+  {id:'ccd',n:'索尼 Cyber-shot',look:'c_ccd',date:1,glow:.3,shift:.0012,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="2.5"/><circle cx="12" cy="13" r="3.6"/><path d="M7 7l1.2-2h3"/><circle cx="17.5" cy="10" r=".6"/></svg>'},
+  {id:'inst',n:'富士 Instax',look:'c_inst',frame:1,square:1,leak:.3,soft:.16,icon:SVG0+'<rect x="4" y="3" width="16" height="18" rx="2"/><rect x="6.5" y="5.5" width="11" height="9" rx="1"/></svg>'},
+  {id:'dispo',n:'柯達 FunSaver',look:'c_dispo',leak:.42,soft:.22,glow:.18,icon:SVG0+'<rect x="3" y="7" width="18" height="12" rx="1.5"/><circle cx="12" cy="13" r="3"/><rect x="5" y="9" width="3" height="2"/><path d="M16 9h3"/></svg>'},
+  {id:'vhs',n:'索尼 Handycam',look:'c_vhs',vhs:1,scan:.2,shift:.003,soft:.28,icon:SVG0+'<rect x="3" y="8" width="13" height="9" rx="1.5"/><path d="M16 11l5-2.5v7L16 13"/><circle cx="7" cy="5.5" r="1.2"/></svg>'},
+  {id:'filmcam',n:'康泰時 T2',look:'c_film',glow:.4,glowTint:[1,.6,.45],icon:SVG0+'<rect x="3" y="8" width="18" height="11" rx="1.5"/><path d="M8 8l1.2-2.5h5.6L16 8"/><circle cx="12" cy="13.5" r="3.4"/></svg>'},
 ];
 let camId=null,camSeed=(Math.random()*1e9)|0,ratioWas=null;
 const SQ=RATIOS.findIndex(r=>r[0]==='1:1');
@@ -1151,6 +1213,10 @@ function buildFbar(){
   m.innerHTML=refThumb?`<img src="${refThumb}" alt="" style="width:16px;height:16px;border-radius:4px;object-fit:cover;vertical-align:-3px;margin-right:6px">追色`:'＋ 追色';
   m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;rebuildMatch();buildFbar();};
   box.appendChild(m);
+  const pb=document.createElement('button');pb.setAttribute('aria-pressed',fil==='pal');
+  pb.innerHTML=pal?`<span style="display:inline-flex;vertical-align:-3px;margin-right:6px;border-radius:4px;overflow:hidden">${pal.map(q=>`<i style="display:block;width:4px;height:16px;background:${q.hex}"></i>`).join('')}</span>色票`:'＋ 色票';
+  pb.onclick=()=>{if(!pal){$('palIn').click();return;}fil='pal';autoFil=false;rebuildPal();buildFbar();};   // first tap picks a photo to take the palette from
+  box.appendChild(pb);
   Object.entries(FIL).forEach(([k,p])=>{
     if(p.hid)return;
     const b=document.createElement('button');b.className='th'+(k===recFil?' rec':'');
@@ -1159,7 +1225,8 @@ function buildFbar(){
     b.onclick=()=>{fil=k;autoFil=false;buildFbar();};box.appendChild(b);
   });
   $('matchRow').hidden=fil==='none';showRes();
-  const kv=Math.round((fil==='match'?matchK:lookK)*100);$('matchK').value=kv;$('matchOut').textContent=kv;
+  const kv=Math.round((fil==='match'?matchK:fil==='pal'?palK:lookK)*100);$('matchK').value=kv;$('matchOut').textContent=kv;
+  $('palRow').hidden=fil!=='pal'||!pal;document.body.classList.toggle('palon',fil==='pal'&&!!pal);drawPal();fitVF();   // rows came or went: give the viewfinder what is left
 }
 /* look cards: the live frame with each look applied, filled in one at a time so the panel stays responsive */
 const TW=64,TH=80;const thCv=document.createElement('canvas');thCv.width=TW;thCv.height=TH;
@@ -1183,7 +1250,8 @@ function refreshThumbs(){
 let kT=0;
 $('matchK').oninput=e=>{
   const k=e.target.value/100;$('matchOut').textContent=e.target.value;
-  if(fil==='match'){matchK=k;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildMatch);}else lookK=k;
+  if(fil==='match'){matchK=k;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildMatch);}
+  else if(fil==='pal'){palK=k;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildPal);}else lookK=k;
 };
 
 $('awbK').oninput=e=>{awbK=e.target.value/100;$('awbOut').textContent=e.target.value;};
@@ -1212,6 +1280,27 @@ $('matchIn').onchange=async e=>{
     fil='match';autoFil=false;rebuildMatch();buildFbar();hint('已套用參考照片的色調，再點一次「追色」可以換照片。');
   }catch(err){hint('這張照片打不開，換一張試試。');}
 };
+
+function drawPal(){
+  const box=$('palSw');box.innerHTML='';if(!pal)return;
+  pal.forEach((q,i)=>{
+    const l=document.createElement('label'),inp=document.createElement('input');l.style.background=q.hex;l.setAttribute('aria-label','色票 '+(i+1));
+    inp.type='color';inp.value=q.hex;
+    inp.oninput=()=>{pal[i]=palFromHex(inp.value);pal[i].hex=inp.value;l.style.background=inp.value;cancelAnimationFrame(kT);kT=requestAnimationFrame(rebuildPal);};
+    inp.onchange=()=>buildFbar();   // refresh the chip's swatch strip once the colour picker closes
+    l.appendChild(inp);box.appendChild(l);
+  });
+}
+function usePal(d,msg){pal=palFromData(d);fil='pal';autoFil=false;rebuildPal();buildFbar();hint(msg);}
+$('palIn').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{const bmp=await createImageBitmap(f);sg.drawImage(bmp,0,0,bmp.width,bmp.height,0,0,96,96);
+    usePal(sg.getImageData(0,0,96,96).data,'已從照片取出 5 個主色，點色塊可以改顏色。');}
+  catch(err){hint('這張照片打不開，換一張試試。');}
+};
+$('palPhoto').onclick=()=>$('palIn').click();
+$('palLive').onclick=()=>{if(!stream||!v.videoWidth)return;const [sx,sy,sw,sh]=crop(v.videoWidth,v.videoHeight);sg.drawImage(v,sx,sy,sw,sh,0,0,96,96);
+  usePal(sg.getImageData(0,0,96,96).data,'已從目前畫面取出 5 個主色。');};
 
 /* live preview: same LUT as the photo, at a size the phone can keep smooth */
 const pc=$('pc'),pg=pc.getContext('2d',{willReadFrequently:true}),PW=[360,480,640];
@@ -1293,7 +1382,7 @@ async function grabPhoto(){
 }
 function finish(c){
   camSeed=(Math.random()*1e9)|0;   // the next shot gets a different light leak
-  $('rDbg').textContent=`v2026.11.24-33・照片 ${c.width}×${c.height}・相機 ${diag()}`;
+  $('rDbg').textContent=`v2026.11.28-36・照片 ${c.width}×${c.height}・相機 ${diag()}`;
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
