@@ -48,14 +48,15 @@ body.lscape .shoot .l,body.lscape .shoot .r{justify-self:auto}
 /* 選項 folds the whole left column (分頁, 調色, 格線, 倒數, 動作) into one small button at the top left */
 body.lscape #lcBtn{display:block;position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:6;margin:0}
 body:not(.lscape) #lcBtn{display:none!important}
-body.lscape:not(.lcol) #tabs,body.lscape:not(.lcol) .top,body.lscape:not(.lcol) #stripBtn,body.lscape:not(.lcol) #strip,body.lscape:not(.lcol) #fbar,body.lscape:not(.lcol) #fixRow,body.lscape:not(.lcol) #matchRow{display:none!important}
+body.lscape:not(.lcol) #tabs,body.lscape:not(.lcol) .top,body.lscape:not(.lcol) #stripBtn,body.lscape:not(.lcol) #strip,body.lscape:not(.lcol) #fbar,body.lscape:not(.lcol) #tbar,body.lscape:not(.lcol) #palRow,body.lscape:not(.lcol) #fixRow,body.lscape:not(.lcol) #matchRow{display:none!important}
 body.lscape #tabs{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:calc(108px + env(safe-area-inset-left,0px));z-index:5;margin:0;display:flex!important;gap:6px}
 body.lscape #tabs button{padding:6px 10px;font-size:13px}
 body.lscape .top{display:flex;position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:12px;z-index:5;margin:0;padding:0;background:none;border:0}
 body.lscape #stripBtn{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:58px;z-index:5;margin:0}
 body.lscape #strip{position:fixed;left:0;right:112px;bottom:0;z-index:3;margin:0;padding:10px calc(10px + env(safe-area-inset-left,0px)) 56px;max-height:55%;overflow-y:auto;background:rgba(0,0,0,.72)}
-body.lscape.cp #fbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow,body.lscape.cp #palRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
-body.lscape.cp #fbar{top:calc(56px + env(safe-area-inset-top,0px))}
+body.lscape.cp #fbar,body.lscape.cp #tbar,body.lscape.cp #fixRow,body.lscape.cp #matchRow,body.lscape.cp #palRow{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));right:112px;z-index:3;max-height:40%;overflow-y:auto;background:rgba(0,0,0,.72);border-radius:12px;padding:8px}
+body.lscape.cp #tbar{top:calc(56px + env(safe-area-inset-top,0px))}
+body.lscape.cp #fbar{top:calc(106px + env(safe-area-inset-top,0px));max-height:34%}
 body.lscape.cp #fixRow,body.lscape.cp #matchRow{bottom:104px}
 body.lscape.cp #palRow{bottom:136px}
 body.lscape.palon #fixRow{display:none!important}   /* landscape is tight: the palette row takes the white-balance row's place */
@@ -64,7 +65,7 @@ body.fill:not(.lscape) .vf{aspect-ratio:auto;flex:1 1 auto;min-height:0;max-heig
 /* color panel: hidden until 調色 is tapped */
 /* 調色 and 構圖 are two separate panels: only one is on screen at a time */
 body.cp:not(.lscape) #tabs,body.cp:not(.lscape) #stripBtn,body.cp:not(.lscape) #strip,body.cp:not(.lscape) #refbox{display:none!important}
-body:not(.cp) #fbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow,body:not(.cp) #palRow{display:none!important}
+body:not(.cp) #fbar,body:not(.cp) #tbar,body:not(.cp) #fixRow,body:not(.cp) #matchRow,body:not(.cp) #palRow{display:none!important}
 .fbar,.refbox{flex-shrink:0}
 .pal{display:flex;width:100%;height:38px;border-radius:10px;overflow:hidden}
 .pal label{flex:1;position:relative}
@@ -192,10 +193,11 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="row" id="flashRow" hidden><button class="ibtn" id="flashBtn" aria-pressed="false">閃光燈 關</button></div>
     <div class="row" id="isoRow" hidden><span style="min-width:3em">ISO</span><button class="ibtn" id="isoAuto" aria-pressed="true">自動</button><input id="isoIn" type="range"><output id="isoOut">100</output></div>
     <div class="row" id="dbgRow"><span style="min-width:3em">畫面</span><output id="dbgOut">–</output></div>
-    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.28-37</output></div>
+    <div class="row" id="verRow"><span style="min-width:3em">版本</span><output style="font-variant-numeric:tabular-nums">v2026.11.28-38</output></div>
   </div>
 </div>
 <div class="hint" id="hint">拖曳虛線移位置，雙指縮放大小，點一下對焦。</div>
+<div class="fbar" id="tbar"></div>
 <div class="fbar" id="fbar"></div>
 <input id="matchIn" type="file" accept="image/*" hidden>
 <input id="palIn" type="file" accept="image/*" hidden>
@@ -1195,7 +1197,7 @@ function camFX(g,W,H,cam,seed,stars,lv,gl){
 /* filter chips */
 function buildFbar(){
   syncCam();
-  const box=$('fbar');box.innerHTML='';
+  const box=$('fbar');box.innerHTML='';const tb=$('tbar');tb.innerHTML='';   // tb: the effect and colour-match chips; box: the camera and look cards
   CAMS.forEach(cm=>{
     const b=document.createElement('button');b.className='th cam';
     b.innerHTML=`<span class="tw" data-k="${cm.look}" style="background:${FIL[cm.look].sw}">${thumbs[cm.look]?`<img src="${thumbs[cm.look]}" alt="">`:''}</span><span class="cbadge">${cm.icon}</span><span class="tl">${cm.n}</span>`;
@@ -1205,20 +1207,20 @@ function buildFbar(){
   });
   const dv=document.createElement('span');dv.className='cdiv';box.appendChild(dv);
   const sb=document.createElement('button');sb.textContent='星芒 '+['關','柔','中','強'][starK];sb.setAttribute('aria-pressed',starK>0);
-  sb.onclick=()=>{starK=(starK+1)%4;starList=null;buildFbar();};box.appendChild(sb);   // 關 → 柔 → 中 → 強
+  sb.onclick=()=>{starK=(starK+1)%4;starList=null;buildFbar();};tb.appendChild(sb);   // 關 → 柔 → 中 → 強
   const gb=document.createElement('button');gb.textContent='光暈 '+['關','柔','中','強'][glowK];gb.setAttribute('aria-pressed',glowK>0);
-  gb.onclick=()=>{glowK=(glowK+1)%4;buildFbar();};box.appendChild(gb);
+  gb.onclick=()=>{glowK=(glowK+1)%4;buildFbar();};tb.appendChild(gb);
   const a=document.createElement('button');a.textContent='自動';a.setAttribute('aria-pressed',autoFil);
-  a.onclick=()=>{autoFil=!autoFil;if(autoFil&&recFil)fil=recFil;buildFbar();};box.appendChild(a);
+  a.onclick=()=>{autoFil=!autoFil;if(autoFil&&recFil)fil=recFil;buildFbar();};tb.appendChild(a);
   // 追色 chip: first tap picks a reference photo, later taps select it; tap again while selected to change photo
   const m=document.createElement('button');m.setAttribute('aria-pressed',fil==='match');
   m.innerHTML=refThumb?`<img src="${refThumb}" alt="" style="width:16px;height:16px;border-radius:4px;object-fit:cover;vertical-align:-3px;margin-right:6px">追色`:'＋ 追色';
   m.onclick=()=>{if(!refStats||fil==='match'){$('matchIn').click();return;}fil='match';autoFil=false;rebuildMatch();buildFbar();};
-  box.appendChild(m);
+  tb.appendChild(m);
   const pb=document.createElement('button');pb.setAttribute('aria-pressed',fil==='pal');
   pb.innerHTML=pal?`<span style="display:inline-flex;vertical-align:-3px;margin-right:6px;border-radius:4px;overflow:hidden">${pal.map(q=>`<i style="display:block;width:4px;height:16px;background:${q.hex}"></i>`).join('')}</span>色票`:'＋ 色票';
   pb.onclick=()=>{if(!pal){$('palIn').click();return;}fil='pal';autoFil=false;rebuildPal();buildFbar();};   // first tap picks a photo to take the palette from
-  box.appendChild(pb);
+  tb.appendChild(pb);
   Object.entries(FIL).forEach(([k,p])=>{
     if(p.hid)return;
     const b=document.createElement('button');b.className='th'+(k===recFil?' rec':'');
@@ -1384,7 +1386,7 @@ async function grabPhoto(){
 }
 function finish(c){
   camSeed=(Math.random()*1e9)|0;   // the next shot gets a different light leak
-  $('rDbg').textContent=`v2026.11.28-37・照片 ${c.width}×${c.height}・相機 ${diag()}`;
+  $('rDbg').textContent=`v2026.11.28-38・照片 ${c.width}×${c.height}・相機 ${diag()}`;
   c.toBlob(b=>{lastBlob=b;if(lastURL)URL.revokeObjectURL(lastURL);lastURL=URL.createObjectURL(b);
     $('thumb').src=lastURL;$('thumb').hidden=false;$('thumbPh').hidden=true;openReview();},'image/jpeg',.97);
 }
